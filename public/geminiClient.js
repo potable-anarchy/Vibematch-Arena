@@ -24,7 +24,10 @@ export class GeminiClient {
       }
 
       const data = await response.json();
-      return data.code;
+      return {
+        code: data.code,
+        type: data.type || "client", // "client" or "server"
+      };
     } catch (error) {
       console.error("Error generating code:", error);
       throw error;

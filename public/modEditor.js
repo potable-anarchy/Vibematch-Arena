@@ -30,7 +30,7 @@ export class ModEditor {
       box-shadow: 0 0 30px rgba(102, 204, 255, 0.3);
     `;
 
-    // Header with tabs
+    // Header
     const header = document.createElement("div");
     header.style.cssText = `
       background: #1a1a2e;
@@ -44,28 +44,16 @@ export class ModEditor {
     header.innerHTML = `
       <div style="display: flex; gap: 10px; align-items: center;">
         <span style="color: #66ccff; font-family: monospace; font-weight: bold;">MOD EDITOR</span>
-        <button id="clientModTab" class="mod-tab active" data-tab="client" style="
-          background: #66ccff;
-          border: none;
-          color: #0a0a14;
-          padding: 5px 12px;
-          cursor: pointer;
-          border-radius: 3px;
-          font-family: monospace;
-          font-weight: bold;
-          font-size: 11px;
-        ">CLIENT</button>
-        <button id="serverModTab" class="mod-tab" data-tab="server" style="
-          background: rgba(102, 204, 255, 0.3);
+        <span id="modTypeIndicator" style="
+          background: rgba(102, 204, 255, 0.2);
           border: 1px solid #66ccff;
           color: #66ccff;
           padding: 5px 12px;
-          cursor: pointer;
           border-radius: 3px;
           font-family: monospace;
           font-weight: bold;
           font-size: 11px;
-        ">SERVER</button>
+        ">AUTO-DETECT</span>
       </div>
       <button id="closeModEditor" style="
         background: #ff3366;
@@ -78,7 +66,7 @@ export class ModEditor {
       ">✕</button>
     `;
 
-    this.currentTab = "client";
+    this.detectedModType = null;
 
     // Mod name input
     const nameInput = document.createElement("div");
@@ -126,7 +114,7 @@ export class ModEditor {
       resize: none;
       outline: none;
     `;
-    this.updatePlaceholder();
+    this.textarea.placeholder = '// Describe what you want the mod to do, then click GENERATE CODE\n// Example: "Add screen shake when I shoot"\n// AI will automatically detect if the code should run on client or server';
     editorWrapper.appendChild(this.textarea);
 
     // Generate Code button overlay
@@ -266,12 +254,6 @@ export class ModEditor {
       .getElementById("closeModEditor")
       .addEventListener("click", () => this.hide());
     document
-      .getElementById("clientModTab")
-      .addEventListener("click", () => this.switchTab("client"));
-    document
-      .getElementById("serverModTab")
-      .addEventListener("click", () => this.switchTab("server"));
-    document
       .getElementById("loadMod")
       .addEventListener("click", () => this.loadCurrentMod());
     document
@@ -378,44 +360,25 @@ export class ModEditor {
     });
   }
 
-  switchTab(tab) {
-    this.currentTab = tab;
+  updateModTypeIndicator(type) {
+    const indicator = document.getElementById("modTypeIndicator");
+    if (!indicator) return;
 
-    // Update tab button styles
-    const clientTab = document.getElementById("clientModTab");
-    const serverTab = document.getElementById("serverModTab");
-
-    if (tab === "client") {
-      clientTab.style.background = "#66ccff";
-      clientTab.style.color = "#0a0a14";
-      clientTab.style.border = "none";
-
-      serverTab.style.background = "rgba(102, 204, 255, 0.3)";
-      serverTab.style.color = "#66ccff";
-      serverTab.style.border = "1px solid #66ccff";
+    if (type === "client") {
+      indicator.textContent = "CLIENT";
+      indicator.style.background = "#66ccff";
+      indicator.style.color = "#0a0a14";
+      indicator.style.border = "none";
+    } else if (type === "server") {
+      indicator.textContent = "SERVER";
+      indicator.style.background = "#ff9500";
+      indicator.style.color = "#0a0a14";
+      indicator.style.border = "none";
     } else {
-      serverTab.style.background = "#66ccff";
-      serverTab.style.color = "#0a0a14";
-      serverTab.style.border = "none";
-
-      clientTab.style.background = "rgba(102, 204, 255, 0.3)";
-      clientTab.style.color = "#66ccff";
-      clientTab.style.border = "1px solid #66ccff";
-    }
-
-    // Update placeholder
-    this.updatePlaceholder();
-
-    this.showStatus(`Switched to ${tab} mod mode`, "#66ccff");
-  }
-
-  updatePlaceholder() {
-    if (this.currentTab === "client") {
-      this.textarea.placeholder =
-        '// Client-side mod - runs in your browser\n// Example:\nregisterHook("onHit", (player, target) => {\n  console.log("Hit!", player, target);\n});';
-    } else {
-      this.textarea.placeholder =
-        '// Server-side mod - runs on the server\n// Example: Give yourself god mode\nconst players = api.getAllPlayers();\nconst me = players.find(p => p.id === api.myId);\nif (me) {\n  api.setHealth(me.id, 100);\n  api.log("Set health to 100");\n}';
+      indicator.textContent = "AUTO-DETECT";
+      indicator.style.background = "rgba(102, 204, 255, 0.2)";
+      indicator.style.color = "#66ccff";
+      indicator.style.border = "1px solid #66ccff";
     }
   }
 
@@ -428,7 +391,8 @@ export class ModEditor {
       return;
     }
 
-    if (this.currentTab === "server") {
+    // Use detected mod type from AI generation
+    if (this.detectedModType === "server") {
       // Execute server-side mod
       if (!this.socket) {
         this.showStatus("❌ Not connected to server", "#ff3366");
@@ -436,12 +400,20 @@ export class ModEditor {
       }
 
       this.showStatus("⏳ Executing server mod...", "#ffaa00");
-      this.socket.emit("executeServerMod", { code });
+      this.socket.emit("executeServerMod", { code, name });
     } else {
-      // Load client-side mod
+      // Load client-side mod (default if not specified)
       const result = this.modSystem.loadMod(name, code);
       if (result.success) {
         this.showStatus(`✅ ${result.message}`, "#66ff66");
+
+        // Start 30-second auto-disable timer
+        this.startModTimer(name);
+
+        // Save to server database for tracking
+        if (this.socket) {
+          this.socket.emit("saveClientMod", { name, code });
+        }
       } else {
         this.showStatus(`❌ ${result.message}`, "#ff3366");
       }
@@ -457,7 +429,7 @@ export class ModEditor {
       return;
     }
 
-    if (this.currentTab === "server") {
+    if (this.detectedModType === "server") {
       // Re-execute server-side mod
       if (!this.socket) {
         this.showStatus("❌ Not connected to server", "#ff3366");
@@ -465,16 +437,40 @@ export class ModEditor {
       }
 
       this.showStatus("⏳ Re-executing server mod...", "#ffaa00");
-      this.socket.emit("executeServerMod", { code });
+      this.socket.emit("executeServerMod", { code, name });
     } else {
       // Reload client-side mod
       const result = this.modSystem.reloadMod(name, code);
       if (result.success) {
         this.showStatus(`🔄 Mod "${name}" reloaded`, "#ffaa00");
+
+        // Restart 30-second auto-disable timer
+        this.startModTimer(name);
       } else {
         this.showStatus(`❌ ${result.message}`, "#ff3366");
       }
     }
+  }
+
+  startModTimer(name) {
+    // Clear existing timer if any
+    if (this.modTimers && this.modTimers[name]) {
+      clearTimeout(this.modTimers[name]);
+    }
+
+    // Initialize timers map if needed
+    if (!this.modTimers) {
+      this.modTimers = {};
+    }
+
+    // Set 30-second timer to auto-disable the mod
+    this.modTimers[name] = setTimeout(() => {
+      this.modSystem.unloadMod(name);
+      this.showStatus(`⏱️ Mod "${name}" auto-disabled after 30 seconds`, "#ffaa00");
+      delete this.modTimers[name];
+    }, 30000);
+
+    console.log(`⏱️ Mod "${name}" will auto-disable in 30 seconds`);
   }
 
   unloadCurrentMod() {
@@ -485,12 +481,18 @@ export class ModEditor {
       return;
     }
 
-    if (this.currentTab === "server") {
+    if (this.detectedModType === "server") {
       this.showStatus(
         "⚠️ Server mods cannot be unloaded (restart required)",
         "#ffaa00",
       );
     } else {
+      // Clear timer if exists
+      if (this.modTimers && this.modTimers[name]) {
+        clearTimeout(this.modTimers[name]);
+        delete this.modTimers[name];
+      }
+
       this.modSystem.unloadMod(name);
       this.showStatus(`🗑️ Mod "${name}" unloaded`, "#66ccff");
     }
@@ -586,13 +588,17 @@ export class ModEditor {
       this.showStatus("🤖 Generating code with AI...", "#ffaa00");
 
       // Call Gemini API
-      const generatedCode = await this.geminiClient.generateModCode(userPrompt);
+      const result = await this.geminiClient.generateModCode(userPrompt);
 
       // Update textarea with generated code
-      this.textarea.value = generatedCode;
+      this.textarea.value = result.code;
+
+      // Store detected mod type
+      this.detectedModType = result.type;
+      this.updateModTypeIndicator(result.type);
 
       this.showStatus(
-        "✅ Code generated successfully! Review and click LOAD MOD to test.",
+        `✅ Code generated successfully! Detected as ${result.type.toUpperCase()} mod. Click LOAD MOD to test.`,
         "#66ff66",
       );
     } catch (error) {

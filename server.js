@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import "dotenv/config";
 import performanceMonitor from "./performance-monitor.js";
+import { saveMod, getModStats, getAllMods } from "./mod-database.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -133,60 +134,76 @@ function buildSystemPrompt() {
   return `You are an expert JavaScript game modding assistant. Your task is to generate safe, working mod code for a 2D browser-based game.
 
 IMPORTANT CONTEXT:
-- The game uses a mod system with specific hooks and APIs
+- The game has TWO execution environments: CLIENT (browser) and SERVER (game server)
 - Mods are written in JavaScript and executed in a sandboxed environment
-- All mod code MUST use the provided modContext and registerHook APIs
+- You MUST determine which environment the mod should run in based on the user's request
 
-AVAILABLE HOOKS (use registerHook to subscribe):
-- onPlayerDraw(player, ctx) - Called when drawing the player
-- onHit(player, target) - Called when player hits an enemy
-- onKill(player, target) - Called when player kills an enemy
-- onPickup(player, item) - Called when player picks up an item
-- onShoot(player, bullet) - Called when player shoots
-- onUpdate(player, deltaTime) - Called every game frame
-- onRender(ctx, player) - Called during render phase
+CLIENT MODS (runs in browser):
+- Use for visual effects, UI changes, HUD modifications, rendering
+- Use registerHook() to subscribe to game events
+- Available hooks: onPlayerDraw, onHit, onKill, onPickup, onShoot, onUpdate, onRender
+- Has access to modContext with game state, canvas, ctx, etc.
 
-MODCONTEXT API (available in all hooks):
-- modContext.player - The player object with properties:
-  - x, y - position
-  - vx, vy - velocity
-  - health, maxHealth
-  - weapons - array of weapons
-  - inventory - items
-- modContext.enemies - array of all enemies
-- modContext.bullets - array of all bullets
-- modContext.items - array of all pickup items
-- modContext.canvas - the game canvas
-- modContext.ctx - the 2D rendering context
+SERVER MODS (runs on game server):
+- Use for gameplay modifications, cheats, spawning items, teleporting
+- Has access to serverModAPI object with methods:
+  - setHealth(targetId, health) - Set player health (0-100)
+  - setArmor(targetId, armor) - Set player armor (0-100)
+  - teleportPlayer(targetId, x, y) - Teleport player
+  - giveWeapon(targetId, weapon) - Give weapon (pistol, smg, shotgun, rifle)
+  - spawnPickup(x, y, type) - Spawn item pickup
+  - killPlayer(targetId) - Kill a player
+  - getGameState() - Get current game state
+  - log(...args) - Log to server console
+  - broadcast(msg) - Send message to all players
+  - myId - Current player's socket ID
+
+DECISION GUIDE (which environment to use):
+- Visual/UI changes → CLIENT
+- Rendering effects (screen shake, particles) → CLIENT
+- Gameplay modifications (health, teleport, spawn) → SERVER
+- Audio/sound effects → CLIENT
+- Game state manipulation → SERVER
 
 CODING RULES:
-1. ALWAYS use registerHook() to register event handlers
-2. DO NOT use eval(), Function constructor, or dynamic code execution
-3. DO NOT use import/require statements
-4. Keep code simple and focused on the requested feature
-5. Include error handling where appropriate
-6. Add helpful comments explaining what the code does
-7. Only generate the mod code itself, no explanations outside code comments
+1. CLIENT: Use registerHook() to register event handlers
+2. SERVER: Use api.methodName() to call server functions
+3. DO NOT use eval(), Function constructor, or dynamic code execution
+4. DO NOT use import/require statements
+5. Keep code simple and focused on the requested feature
+6. Include error handling where appropriate
+7. Add helpful comments explaining what the code does
 
-EXAMPLE MOD STRUCTURE:
+EXAMPLE CLIENT MOD:
 \`\`\`javascript
-// Mod: [Description]
-registerHook("onUpdate", (player, deltaTime) => {
-  // Your code here
-  console.log("Player position:", player.x, player.y);
-});
-
+// CLIENT
+// Mod: Screen shake on hit
 registerHook("onHit", (player, target) => {
-  // Your code here
-  console.log("Hit target:", target);
+  const canvas = document.querySelector("canvas");
+  canvas.style.transform = "translate(2px, 2px)";
+  setTimeout(() => canvas.style.transform = "", 50);
 });
 \`\`\`
 
+EXAMPLE SERVER MOD:
+\`\`\`javascript
+// SERVER
+// Mod: God mode
+api.setHealth(api.myId, 100);
+api.setArmor(api.myId, 100);
+api.log("God mode activated");
+\`\`\`
+
 OUTPUT FORMAT:
-- Generate ONLY valid JavaScript code
-- Wrap code in a code block if needed
-- Include a brief comment at the top describing what the mod does
-- Make sure the code is complete and ready to run
+You MUST start your response with EXACTLY one of these comments on the first line:
+- "// CLIENT" if this is a client-side mod
+- "// SERVER" if this is a server-side mod
+
+Then provide the code. Example:
+\`\`\`javascript
+// CLIENT
+// Your code here...
+\`\`\`
 
 Now generate the mod code based on the user's request.`;
 }
@@ -328,14 +345,56 @@ app.post("/api/generate-mod", async (req, res) => {
       ? codeBlockMatch[1].trim()
       : generatedText.trim();
 
+    // Detect mod type from the first line comment
+    let modType = "client"; // default to client
+    const firstLine = code.split("\n")[0].trim().toLowerCase();
+    if (firstLine.includes("// server")) {
+      modType = "server";
+    } else if (firstLine.includes("// client")) {
+      modType = "client";
+    }
+
+    // Save to database for tracking
+    try {
+      // Generate a unique name based on timestamp
+      const modName = `generated_${Date.now()}`;
+      saveMod(modName, code, modType, prompt, null);
+    } catch (dbError) {
+      console.error("Failed to save mod to database:", dbError);
+      // Don't fail the request if database save fails
+    }
+
     performanceMonitor.endRequest(requestId);
-    res.json({ code });
+    res.json({ code, type: modType });
   } catch (error) {
     console.error("Error in /api/generate-mod:", error);
     performanceMonitor.endRequest(requestId, true);
     res.status(500).json({
       error: error.message || "Failed to generate code",
     });
+  }
+});
+
+// API endpoint to get mod statistics
+app.get("/api/mods/stats", (req, res) => {
+  try {
+    const stats = getModStats();
+    res.json(stats);
+  } catch (error) {
+    console.error("Error fetching mod stats:", error);
+    res.status(500).json({ error: "Failed to fetch mod statistics" });
+  }
+});
+
+// API endpoint to get all mods
+app.get("/api/mods", (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const mods = getAllMods(limit);
+    res.json({ mods });
+  } catch (error) {
+    console.error("Error fetching mods:", error);
+    res.status(500).json({ error: "Failed to fetch mods" });
   }
 });
 
@@ -1422,7 +1481,7 @@ io.on("connection", (socket) => {
   // Server-side mod execution
   socket.on("executeServerMod", (data) => {
     try {
-      const { code } = data;
+      const { code, name } = data;
       const playerId = socket.id;
       const player = gameState.players.get(playerId);
 
@@ -1432,6 +1491,15 @@ io.on("connection", (socket) => {
       }
 
       console.log(`🔧 Executing server mod for ${player.name}`);
+
+      // Save server mod to database
+      try {
+        const modName = name || `server_${Date.now()}`;
+        saveMod(modName, code, "server", null, playerId);
+      } catch (dbError) {
+        console.error("Failed to save server mod to database:", dbError);
+        // Don't fail the request if database save fails
+      }
 
       // Create server mod API available to mod code
       const serverModAPI = {
@@ -1563,6 +1631,20 @@ io.on("connection", (socket) => {
         error: error.message,
         stack: error.stack,
       });
+    }
+  });
+
+  // Track client-side mods
+  socket.on("saveClientMod", (data) => {
+    try {
+      const { name, code } = data;
+      const playerId = socket.id;
+
+      // Save client mod to database
+      saveMod(name, code, "client", null, playerId);
+      console.log(`💾 Saved client mod "${name}" for player ${playerId}`);
+    } catch (error) {
+      console.error("Failed to save client mod:", error);
     }
   });
 });
