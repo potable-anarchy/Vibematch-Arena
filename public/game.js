@@ -786,6 +786,12 @@ function render(dt) {
     }
   });
 
+  // Draw effects (blood splatters should be under players)
+  drawEffects(dt);
+
+  // Draw particles (blood particles should be under players)
+  drawParticles(dt);
+
   // Update and draw players (using interpolated positions)
   renderState.players.forEach((p) => {
     if (p.health > 0) {
@@ -799,12 +805,6 @@ function render(dt) {
       modSystem.callHook("onPlayerDraw", ctx, p, camera);
     }
   });
-
-  // Draw effects
-  drawEffects(dt);
-
-  // Draw particles
-  drawParticles(dt);
 
   // Call mod render hooks
   modSystem.callHook("onRender", ctx, camera, dt);
