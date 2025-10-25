@@ -135,6 +135,35 @@ OUTPUT FORMAT:
 Now generate the mod code based on the user's request.`;
 }
 
+// Test endpoint to check available Gemini models
+app.get("/api/test-gemini", async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: "GEMINI_API_KEY not set" });
+  }
+
+  try {
+    // Try to list available models
+    const modelsResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+    );
+
+    if (modelsResponse.ok) {
+      const models = await modelsResponse.json();
+      return res.json({
+        available: true,
+        models: models.models?.map((m) => m.name) || [],
+      });
+    } else {
+      return res.status(modelsResponse.status).json({
+        error: `API key test failed: ${modelsResponse.statusText}`,
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Gemini API proxy endpoint for mod code generation
 app.post("/api/generate-mod", async (req, res) => {
   try {
@@ -156,9 +185,9 @@ app.post("/api/generate-mod", async (req, res) => {
       });
     }
 
-    // Call Gemini API - using v1 (stable) instead of v1beta
+    // Call Gemini API - using gemini-pro which is more widely available
     const geminiEndpoint =
-      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent";
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
     const systemPrompt = buildSystemPrompt();
     const fullPrompt = `${systemPrompt}\n\nUser Request:\n${prompt}`;
 
