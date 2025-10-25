@@ -782,6 +782,27 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("spectate", () => {
+    try {
+      const player = gameState.players.get(socket.id);
+      if (player) {
+        console.log(`👻 Player ${player.name} (${socket.id}) switching to spectator mode`);
+
+        // Remove player from game without marking as disconnect
+        gameState.players.delete(socket.id);
+        io.emit("playerLeft", socket.id);
+
+        // Maintain bot count (spawn bots if needed)
+        maintainBotCount();
+
+        // Broadcast updated player count
+        io.emit("playerCount", gameState.players.size + gameState.bots.size);
+      }
+    } catch (error) {
+      console.error("❌ Error in spectate handler:", error);
+    }
+  });
+
   socket.on("disconnect", () => {
     try {
       console.log("Player disconnected:", socket.id);

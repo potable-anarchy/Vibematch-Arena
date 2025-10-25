@@ -407,16 +407,12 @@ playerNameInput.addEventListener("keydown", (e) => {
 // Spectate button
 spectateButton.addEventListener("click", () => {
   if (!isSpectator) {
-    // Disconnect player and reconnect as spectator
-    socket.disconnect();
+    // Emit spectate event to server to properly remove player
+    socket.emit("spectate");
+
+    // Update local state
     playerId = null;
     isSpectator = true;
-
-    // Reconnect as spectator
-    setTimeout(() => {
-      socket.connect();
-      console.log("👻 Switched to spectator mode");
-    }, 100);
 
     // Show spectator overlay again
     const spectatorOverlay = document.getElementById("spectatorOverlay");
@@ -427,6 +423,8 @@ spectateButton.addEventListener("click", () => {
     // Reset join button
     joinButton.disabled = false;
     joinButton.textContent = "JOIN GAME";
+
+    console.log("👻 Switched to spectator mode");
   }
 
   // Close menu
