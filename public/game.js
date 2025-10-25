@@ -549,6 +549,10 @@ socket.on("pickupCollected", (data) => {
   }
 });
 
+socket.on("wallImpact", (data) => {
+  createWallImpactEffect(data.x, data.y, data.angle);
+});
+
 socket.on("respawn", (data) => {
   if (data.playerId === playerId) {
     respawnMessage.style.display = "none";
@@ -720,6 +724,26 @@ function createPickupEffect(x, y) {
       maxLife: 0.6,
       color: "#66ccff",
       size: 2,
+    });
+  }
+}
+
+function createWallImpactEffect(x, y, angle) {
+  // Create small particles flying off the wall
+  // Particles should fly away from the wall (opposite to bullet direction)
+  for (let i = 0; i < 5; i++) {
+    // Spread particles in a cone away from impact point
+    const spreadAngle = angle + Math.PI + (Math.random() - 0.5) * 1.0; // Opposite direction with spread
+    const speed = 80 + Math.random() * 120;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(spreadAngle) * speed,
+      vy: Math.sin(spreadAngle) * speed,
+      life: 0.3 + Math.random() * 0.2,
+      maxLife: 0.5,
+      color: "#aaaaaa", // Gray dust/debris color
+      size: 2 + Math.random() * 2,
     });
   }
 }

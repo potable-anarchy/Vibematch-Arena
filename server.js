@@ -855,8 +855,16 @@ function handleShoot(player) {
           damage: weapon.damage,
           killed,
         });
+      } else if (hit && hit.wall) {
+        // Bullet hit a wall - emit wall impact event
+        const impactX = player.x + Math.cos(angle) * hit.distance;
+        const impactY = player.y + Math.sin(angle) * hit.distance;
+        io.emit("wallImpact", {
+          x: impactX,
+          y: impactY,
+          angle: angle,
+        });
       }
-      // If hit.wall is true, bullet stopped at wall (no damage)
     }
   } else {
     // Hitscan weapons
@@ -872,8 +880,16 @@ function handleShoot(player) {
         damage: weapon.damage,
         killed,
       });
+    } else if (hit && hit.wall) {
+      // Bullet hit a wall - emit wall impact event
+      const impactX = player.x + Math.cos(angle) * hit.distance;
+      const impactY = player.y + Math.sin(angle) * hit.distance;
+      io.emit("wallImpact", {
+        x: impactX,
+        y: impactY,
+        angle: angle,
+      });
     }
-    // If hit.wall is true, bullet stopped at wall (no damage)
   }
 
   io.emit("shoot", {
