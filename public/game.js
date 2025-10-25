@@ -207,12 +207,20 @@ let effects = [];
 let particles = [];
 
 // Setup canvas
+let resizeTimeout;
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+
+  // Disable image smoothing for pixel-perfect rendering
+  ctx.imageSmoothingEnabled = false;
 }
 
-window.addEventListener("resize", resizeCanvas);
+// Debounce resize to avoid race conditions with render loop
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(resizeCanvas, 100);
+});
 resizeCanvas();
 
 // Join game (transition from spectator to player)
@@ -759,13 +767,13 @@ function render(dt) {
     if (distance > CAMERA_DEADZONE) {
       // Smooth lerp toward target
       const lerpFactor = Math.min(1, CAMERA_LERP_SPEED * dt);
-      camera.x += dx * lerpFactor;
-      camera.y += dy * lerpFactor;
+      camera.x = Math.floor(camera.x + dx * lerpFactor);
+      camera.y = Math.floor(camera.y + dy * lerpFactor);
     }
   } else if (player) {
-    // Update camera to follow player
-    camera.x = player.x;
-    camera.y = player.y;
+    // Update camera to follow player (rounded to prevent sub-pixel shifting)
+    camera.x = Math.floor(player.x);
+    camera.y = Math.floor(player.y);
   }
 
   // Draw background grid
@@ -1096,11 +1104,11 @@ function drawParticles(dt) {
 }
 
 function worldToScreenX(worldX) {
-  return worldX - camera.x + canvas.width / 2;
+  return Math.floor(worldX - camera.x + canvas.width / 2);
 }
 
 function worldToScreenY(worldY) {
-  return worldY - camera.y + canvas.height / 2;
+  return Math.floor(worldY - camera.y + canvas.height / 2);
 }
 
 // Animation loop
