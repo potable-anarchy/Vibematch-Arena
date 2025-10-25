@@ -346,6 +346,7 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // Game Menu System
 const gameMenu = document.getElementById("gameMenu");
 const controlsScreen = document.getElementById("controlsScreen");
+const resumeGameButton = document.getElementById("resumeGameButton");
 const playerNameInput = document.getElementById("playerNameInput");
 const saveNameButton = document.getElementById("saveNameButton");
 const spectateButton = document.getElementById("spectateButton");
@@ -380,9 +381,9 @@ function closeControlsScreen() {
   gameMenu.style.display = "flex";
 }
 
-// ESC key handler
+// M key handler for game menu
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
+  if (e.key.toLowerCase() === "m") {
     // If controls screen is open, go back to menu
     if (controlsScreen.style.display === "flex") {
       closeControlsScreen();
@@ -392,6 +393,11 @@ document.addEventListener("keydown", (e) => {
       toggleGameMenu();
     }
   }
+});
+
+// Resume game button
+resumeGameButton.addEventListener("click", () => {
+  toggleGameMenu();
 });
 
 // Save name button
