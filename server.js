@@ -1032,13 +1032,22 @@ function damagePlayer(player, damage, attackerId) {
 
   player.health = Math.max(0, player.health - damage);
 
+  // Track damage for performance metrics
+  performanceMonitor.recordDamage(damage);
+
   if (player.health <= 0) {
     player.deaths++;
+
+    // Track death for performance metrics
+    performanceMonitor.recordDeath();
     if (attackerId && attackerId !== player.id) {
       // Check if attacker is a player
       const attacker = gameState.players.get(attackerId);
       if (attacker) {
         attacker.kills++;
+
+        // Track kill for performance metrics
+        performanceMonitor.recordKill();
 
         // Check if attacker reached score limit
         if (attacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
@@ -1052,6 +1061,9 @@ function damagePlayer(player, damage, attackerId) {
         const botAttacker = gameState.bots.get(attackerId);
         if (botAttacker) {
           botAttacker.kills++;
+
+          // Track kill for performance metrics
+          performanceMonitor.recordKill();
 
           // Check if bot reached score limit
           if (botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
