@@ -306,13 +306,14 @@
             <!-- Time Range Selector -->
             <div class="time-range-selector">
                 <div class="time-range-presets">
+                    <button class="time-btn active" data-range="live">
+                        🔴 Live
+                    </button>
                     <button class="time-btn" data-range="1m">1 Min</button>
                     <button class="time-btn" data-range="5m">5 Min</button>
                     <button class="time-btn" data-range="1h">1 Hour</button>
                     <button class="time-btn" data-range="12h">12 Hours</button>
-                    <button class="time-btn active" data-range="24h">
-                        24 Hours
-                    </button>
+                    <button class="time-btn" data-range="24h">24 Hours</button>
                     <button class="time-btn" data-range="48h">48 Hours</button>
                     <button class="time-btn" data-range="custom">
                         Custom Range
@@ -786,6 +787,9 @@
             });
 
             socket.on("metrics", (metrics) => {
+                // Only update if in live mode
+                if (!isLiveMode) return;
+
                 // Update game loop metrics
                 updateMetricValue(
                     "tick-time",
@@ -916,9 +920,10 @@
             });
 
             // Time Range Selection
-            let currentTimeRange = "24h";
+            let currentTimeRange = "live";
             let customStart = null;
             let customEnd = null;
+            let isLiveMode = true;
 
             // Convert range string to milliseconds
             function rangeToMs(range) {
@@ -964,11 +969,164 @@
                         `Loaded ${result.count} historical data points`,
                     );
 
-                    // TODO: Update graphs with historical data
-                    // This is where we'd update charts/graphs
+                    // Calculate aggregates and update dashboard
+                    const aggregates = calculateAggregates(result.data);
+                    if (aggregates) {
+                        updateDashboardWithAggregates(aggregates);
+                    }
                 } catch (error) {
                     console.error("Failed to load historical data:", error);
                 }
+            }
+
+            // Calculate aggregated metrics from historical data
+            function calculateAggregates(data) {
+                if (!data || data.length === 0) {
+                    return null;
+                }
+
+                const aggregate = {
+                    tickTime: { avg: 0, min: Infinity, max: -Infinity, p95: 0 },
+                    memory: { avg: 0, min: Infinity, max: -Infinity },
+                    cpu: { avg: 0, min: Infinity, max: -Infinity },
+                    players: { avg: 0, min: Infinity, max: -Infinity },
+                    api: { avgResponseTime: 0 },
+                    health: { avg: 0 },
+                };
+
+                let totalTickTime = 0;
+                let tickCount = 0;
+                const tickTimes = [];
+
+                data.forEach((snapshot) => {
+                    // Game Loop
+                    if (snapshot.avg_tick_time != null) {
+                        totalTickTime += snapshot.avg_tick_time;
+                        tickCount++;
+                        if (snapshot.tick_p95)
+                            tickTimes.push(snapshot.tick_p95);
+                        aggregate.tickTime.min = Math.min(
+                            aggregate.tickTime.min,
+                            snapshot.avg_tick_time,
+                        );
+                        aggregate.tickTime.max = Math.max(
+                            aggregate.tickTime.max,
+                            snapshot.max_tick_time || 0,
+                        );
+                    }
+
+                    // Memory
+                    if (snapshot.memory_usage_mb != null) {
+                        aggregate.memory.avg += snapshot.memory_usage_mb;
+                        aggregate.memory.min = Math.min(
+                            aggregate.memory.min,
+                            snapshot.memory_usage_mb,
+                        );
+                        aggregate.memory.max = Math.max(
+                            aggregate.memory.max,
+                            snapshot.memory_usage_mb,
+                        );
+                    }
+
+                    // CPU
+                    if (snapshot.cpu_usage != null) {
+                        aggregate.cpu.avg += snapshot.cpu_usage;
+                        aggregate.cpu.min = Math.min(
+                            aggregate.cpu.min,
+                            snapshot.cpu_usage,
+                        );
+                        aggregate.cpu.max = Math.max(
+                            aggregate.cpu.max,
+                            snapshot.cpu_usage,
+                        );
+                    }
+
+                    // Players
+                    const totalPlayers =
+                        (snapshot.player_count || 0) +
+                        (snapshot.bot_count || 0);
+                    aggregate.players.avg += totalPlayers;
+                    aggregate.players.min = Math.min(
+                        aggregate.players.min,
+                        totalPlayers,
+                    );
+                    aggregate.players.max = Math.max(
+                        aggregate.players.max,
+                        totalPlayers,
+                    );
+
+                    // API
+                    if (snapshot.api_avg_response_time) {
+                        aggregate.api.avgResponseTime +=
+                            snapshot.api_avg_response_time;
+                    }
+
+                    // Health
+                    if (snapshot.overall_health != null) {
+                        aggregate.health.avg += snapshot.overall_health;
+                    }
+                });
+
+                const count = data.length;
+                aggregate.tickTime.avg =
+                    tickCount > 0 ? (totalTickTime / tickCount).toFixed(2) : 0;
+                aggregate.tickTime.p95 =
+                    tickTimes.length > 0
+                        ? tickTimes.sort((a, b) => a - b)[
+                              Math.floor(tickTimes.length * 0.95)
+                          ]
+                        : 0;
+                aggregate.memory.avg = (aggregate.memory.avg / count).toFixed(
+                    0,
+                );
+                aggregate.cpu.avg = (aggregate.cpu.avg / count).toFixed(1);
+                aggregate.players.avg = (aggregate.players.avg / count).toFixed(
+                    1,
+                );
+                aggregate.api.avgResponseTime = (
+                    aggregate.api.avgResponseTime / count
+                ).toFixed(2);
+                aggregate.health.avg = (aggregate.health.avg / count).toFixed(
+                    1,
+                );
+
+                return aggregate;
+            }
+
+            // Update dashboard with aggregated data
+            function updateDashboardWithAggregates(aggregates) {
+                if (!aggregates) return;
+
+                // Update Game Loop metrics
+                updateMetricValue("tick-time", aggregates.tickTime.avg, {
+                    warning: 16.67,
+                    danger: 20,
+                });
+                updateMetricValue(
+                    "max-tick-time",
+                    aggregates.tickTime.max.toFixed(2) + "ms",
+                );
+
+                // Update System metrics
+                updateMetricValue("memory-usage", aggregates.memory.avg, {
+                    warning: 500,
+                    danger: 1000,
+                });
+                updateMetricValue("cpu-usage", aggregates.cpu.avg + "%", {
+                    warning: 70,
+                    danger: 90,
+                });
+
+                // Update player count
+                updateMetricValue(
+                    "player-count",
+                    Math.round(aggregates.players.avg),
+                );
+
+                console.log(
+                    "Dashboard updated with aggregated data:",
+                    aggregates,
+                );
             }
 
             // Handle time range button clicks
@@ -984,6 +1142,23 @@
 
                     const range = this.getAttribute("data-range");
                     currentTimeRange = range;
+
+                    // Handle live mode
+                    if (range === "live") {
+                        isLiveMode = true;
+                        document.getElementById(
+                            "customRangePicker",
+                        ).style.display = "none";
+                        document.getElementById("rangeDisplay").textContent =
+                            "Showing: Live data";
+                        document.getElementById("dataPoints").textContent =
+                            "Real-time updates";
+                        console.log("Switched to live mode");
+                        return;
+                    }
+
+                    // Not live mode - viewing historical data
+                    isLiveMode = false;
 
                     // Show/hide custom range picker
                     const customPicker =
@@ -1052,8 +1227,8 @@
                     updateHistoricalData();
                 });
 
-            // Load initial historical data
-            updateHistoricalData();
+            // Don't load historical data on startup - we start in live mode
+            // Data will be fetched when user selects a historical time range
         </script>
     </body>
 </html>
