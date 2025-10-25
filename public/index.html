@@ -50,58 +50,30 @@
                     <h2>GAME MENU</h2>
                     <div class="menu-hint">Press ESC to close</div>
 
-                    <!-- Tab Navigation -->
-                    <div class="menu-tabs">
-                        <button id="playerTab" class="menu-tab active">
-                            Player
-                        </button>
-                        <button id="settingsTab" class="menu-tab">
-                            Settings
+                    <!-- Single tab content - no tab navigation needed -->
+                    <div class="game-menu-section">
+                        <h3>Player Name</h3>
+                        <input
+                            type="text"
+                            id="playerNameInput"
+                            maxlength="20"
+                            placeholder="Enter your name"
+                        />
+                        <button id="saveNameButton" class="menu-btn">
+                            Save Name
                         </button>
                     </div>
 
-                    <!-- Tab 1: Player Settings -->
-                    <div id="playerTabContent" class="tab-content active">
-                        <div class="game-menu-section">
-                            <h3>Player Name</h3>
-                            <input
-                                type="text"
-                                id="playerNameInput"
-                                maxlength="20"
-                                placeholder="Enter your name"
-                            />
-                            <button id="saveNameButton" class="menu-btn">
-                                Save Name
-                            </button>
-                        </div>
-
-                        <div class="game-menu-section">
-                            <button id="spectateButton" class="menu-btn">
-                                Enter Spectate Mode
-                            </button>
-                        </div>
-
-                        <div class="game-menu-section">
-                            <button id="controlsButton" class="menu-btn">
-                                Controls & How to Play
-                            </button>
-                        </div>
+                    <div class="game-menu-section">
+                        <button id="spectateButton" class="menu-btn">
+                            Enter Spectate Mode
+                        </button>
                     </div>
 
-                    <!-- Tab 2: Settings -->
-                    <div id="settingsTabContent" class="tab-content">
-                        <div class="game-menu-section">
-                            <h3>Game Settings</h3>
-                            <p
-                                style="
-                                    color: #66ccff;
-                                    text-align: center;
-                                    font-size: 14px;
-                                "
-                            >
-                                Additional settings coming soon...
-                            </p>
-                        </div>
+                    <div class="game-menu-section">
+                        <button id="controlsButton" class="menu-btn">
+                            Controls & How to Play
+                        </button>
                     </div>
                 </div>
             </div>
