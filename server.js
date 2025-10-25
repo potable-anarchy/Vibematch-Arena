@@ -768,6 +768,9 @@ const gameState = {
   nextPickupId: 0,
   nextBotId: 0,
   soundEvents: [], // Sound events for bots to hear (gunshots, footsteps)
+  warmupEndTime: null, // When warmup ends (null = not in warmup)
+  countdownStartTime: null, // When 5 second countdown starts (null = not counting down)
+  roundActive: false, // Is the round currently active (scoring enabled)
 };
 
 // Game constants
@@ -786,6 +789,8 @@ const GAME_CONFIG = {
   SCORE_LIMIT: 15, // Round ends when a player reaches this kill count
   HEADSHOT_RADIUS_RATIO: 0.2, // Headshot zone is 20% of player radius (center 4px)
   HEADSHOT_DAMAGE_MULTIPLIER: 1.5, // Headshots deal 150% damage
+  WARMUP_DURATION: 25000, // 25 seconds warmup period
+  COUNTDOWN_DURATION: 5000, // 5 second countdown before round starts
 };
 
 // Sound detection ranges for bots
@@ -1477,6 +1482,54 @@ function createPlayer(id, name) {
   };
 }
 
+// Start warmup period
+function startWarmup() {
+  const now = Date.now();
+  gameState.warmupEndTime = now + GAME_CONFIG.WARMUP_DURATION;
+  gameState.roundActive = false;
+
+  console.log(`🔥 WARMUP STARTED - 25 seconds`);
+
+  // Notify all clients that warmup has started
+  io.emit("warmupStart", {
+    duration: GAME_CONFIG.WARMUP_DURATION,
+    endTime: gameState.warmupEndTime,
+  });
+}
+
+// Start countdown (after warmup ends)
+function startCountdown() {
+  const now = Date.now();
+  gameState.countdownStartTime = now;
+
+  console.log(`⏱️  COUNTDOWN STARTED - 5 seconds`);
+
+  // Kill all players and respawn them
+  for (const [id, player] of gameState.players) {
+    player.health = 0;
+    player.respawnAt = now + 100; // Respawn almost immediately
+  }
+
+  for (const [id, bot] of gameState.bots) {
+    bot.health = 0;
+    bot.respawnAt = now + 100; // Respawn almost immediately
+  }
+
+  // Notify all clients that countdown has started
+  io.emit("countdownStart", {
+    duration: GAME_CONFIG.COUNTDOWN_DURATION,
+  });
+
+  // After 5 seconds, start the actual round
+  setTimeout(() => {
+    gameState.roundActive = true;
+    gameState.countdownStartTime = null;
+    console.log(`🎮 ROUND ACTIVE - scoring enabled`);
+
+    io.emit("roundStart");
+  }, GAME_CONFIG.COUNTDOWN_DURATION);
+}
+
 // Reset round - clears all scores and respawns everyone
 function resetRound(winnerId, winnerName) {
   console.log(
@@ -1503,6 +1556,11 @@ function resetRound(winnerId, winnerName) {
   }
 
   console.log(`🔄 Round reset - all scores cleared`);
+
+  // Start warmup period after a short delay
+  setTimeout(() => {
+    startWarmup();
+  }, 3000);
 }
 
 // Handle player damage
@@ -1522,41 +1580,44 @@ function damagePlayer(player, damage, attackerId) {
   performanceMonitor.recordDamage(damage);
 
   if (player.health <= 0) {
-    player.deaths++;
+    // Only count kills/deaths if round is active (not during warmup)
+    if (gameState.roundActive) {
+      player.deaths++;
 
-    // Track death for performance metrics
-    performanceMonitor.recordDeath();
-    if (attackerId && attackerId !== player.id) {
-      // Check if attacker is a player
-      const attacker = gameState.players.get(attackerId);
-      if (attacker) {
-        attacker.kills++;
-
-        // Track kill for performance metrics
-        performanceMonitor.recordKill();
-
-        // Check if attacker reached score limit
-        if (attacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
-          // Reset round after a short delay (3 seconds)
-          setTimeout(() => {
-            resetRound(attacker.id, attacker.name);
-          }, 3000);
-        }
-      } else {
-        // Check if attacker is a bot
-        const botAttacker = gameState.bots.get(attackerId);
-        if (botAttacker) {
-          botAttacker.kills++;
+      // Track death for performance metrics
+      performanceMonitor.recordDeath();
+      if (attackerId && attackerId !== player.id) {
+        // Check if attacker is a player
+        const attacker = gameState.players.get(attackerId);
+        if (attacker) {
+          attacker.kills++;
 
           // Track kill for performance metrics
           performanceMonitor.recordKill();
 
-          // Check if bot reached score limit
-          if (botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+          // Check if attacker reached score limit
+          if (attacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
             // Reset round after a short delay (3 seconds)
             setTimeout(() => {
-              resetRound(botAttacker.id, botAttacker.name);
+              resetRound(attacker.id, attacker.name);
             }, 3000);
+          }
+        } else {
+          // Check if attacker is a bot
+          const botAttacker = gameState.bots.get(attackerId);
+          if (botAttacker) {
+            botAttacker.kills++;
+
+            // Track kill for performance metrics
+            performanceMonitor.recordKill();
+
+            // Check if bot reached score limit
+            if (botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+              // Reset round after a short delay (3 seconds)
+              setTimeout(() => {
+                resetRound(botAttacker.id, botAttacker.name);
+              }, 3000);
+            }
           }
         }
       }
@@ -1761,22 +1822,28 @@ io.on("connection", (socket) => {
 
       player.aimAngle = input.aimAngle;
 
-      // Movement
-      const moveX = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-      const moveY = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-
-      if (moveX !== 0 || moveY !== 0) {
-        // End spawn protection when moving
-        if (player.invulnerable > Date.now()) {
-          player.invulnerable = 0;
-        }
-
-        const mag = Math.sqrt(moveX * moveX + moveY * moveY);
-        player.vx = (moveX / mag) * GAME_CONFIG.PLAYER_SPEED;
-        player.vy = (moveY / mag) * GAME_CONFIG.PLAYER_SPEED;
-      } else {
+      // Freeze players during countdown (but allow them to aim)
+      if (gameState.countdownStartTime !== null) {
         player.vx = 0;
         player.vy = 0;
+      } else {
+        // Movement
+        const moveX = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        const moveY = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+
+        if (moveX !== 0 || moveY !== 0) {
+          // End spawn protection when moving
+          if (player.invulnerable > Date.now()) {
+            player.invulnerable = 0;
+          }
+
+          const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+          player.vx = (moveX / mag) * GAME_CONFIG.PLAYER_SPEED;
+          player.vy = (moveY / mag) * GAME_CONFIG.PLAYER_SPEED;
+        } else {
+          player.vx = 0;
+          player.vy = 0;
+        }
       }
 
       // Shooting
@@ -2273,6 +2340,12 @@ function gameLoop() {
     const now = Date.now();
     const dt = (now - lastTick) / 1000; // seconds
     lastTick = now;
+
+    // Check warmup timer
+    if (gameState.warmupEndTime && now >= gameState.warmupEndTime) {
+      gameState.warmupEndTime = null;
+      startCountdown();
+    }
 
     // Clean up expired sound events
     cleanupSoundEvents();
@@ -2907,6 +2980,12 @@ function gameLoop() {
         bot.currentTargetDist = nearestDist;
       }
 
+      // Freeze bots during countdown
+      if (gameState.countdownStartTime !== null) {
+        bot.vx = 0;
+        bot.vy = 0;
+      }
+
       // Move bot with collision detection and wall sliding
       const newX = bot.x + bot.vx * dt;
       const newY = bot.y + bot.vy * dt;
@@ -3322,6 +3401,11 @@ function gameLoop() {
 // Initialize and start server
 initializePickups();
 maintainBotCount(); // Spawn initial bots
+
+// Start the first warmup after a short delay
+setTimeout(() => {
+  startWarmup();
+}, 2000);
 
 // Clean up expired active mods every 10 seconds
 setInterval(() => {

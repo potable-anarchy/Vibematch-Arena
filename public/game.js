@@ -647,6 +647,34 @@ socket.on("roundOver", (data) => {
   modSystem.callHook("onRoundOver", data.winnerId, data.winnerName);
 });
 
+// Warmup and countdown state
+let warmupEndTime = null;
+let countdownStartTime = null;
+let countdownInterval = null;
+
+socket.on("warmupStart", (data) => {
+  warmupEndTime = data.endTime;
+  console.log("🔥 Warmup started - 25 seconds");
+  showWarmupMessage();
+});
+
+socket.on("countdownStart", (data) => {
+  warmupEndTime = null;
+  countdownStartTime = Date.now();
+  console.log("⏱️  Countdown started - 5 seconds");
+  showCountdownMessage();
+});
+
+socket.on("roundStart", () => {
+  countdownStartTime = null;
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+  console.log("🎮 Round started!");
+  hideCountdownMessage();
+});
+
 // Send input to server
 setInterval(() => {
   const player = gameState.players.find((p) => p.id === playerId);
@@ -750,45 +778,48 @@ function showKillMessage(killerId, victimId, isHeadshot = false) {
 function showRoundOverMessage(winnerName, scoreLimit) {
   const overlay = document.createElement("div");
   overlay.style.position = "fixed";
-  overlay.style.top = "0";
-  overlay.style.left = "0";
-  overlay.style.width = "100%";
-  overlay.style.height = "100%";
-  overlay.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+  overlay.style.top = "50%";
+  overlay.style.left = "50%";
+  overlay.style.transform = "translate(-50%, -50%)";
+  overlay.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
+  overlay.style.border = "3px solid #ffff00";
+  overlay.style.borderRadius = "10px";
+  overlay.style.padding = "40px 60px";
   overlay.style.display = "flex";
   overlay.style.flexDirection = "column";
   overlay.style.justifyContent = "center";
   overlay.style.alignItems = "center";
   overlay.style.zIndex = "9999";
   overlay.style.animation = "fadeIn 0.5s";
+  overlay.style.boxShadow = "0 0 40px rgba(255, 255, 0, 0.5)";
 
   const title = document.createElement("div");
   title.textContent = "ROUND OVER";
-  title.style.fontSize = "64px";
+  title.style.fontSize = "48px";
   title.style.fontWeight = "bold";
   title.style.color = "#ffff00";
   title.style.fontFamily = "monospace";
   title.style.textShadow = "0 0 20px #ffff00";
-  title.style.marginBottom = "30px";
+  title.style.marginBottom = "20px";
 
   const winnerText = document.createElement("div");
   winnerText.textContent = `${winnerName} WINS!`;
-  winnerText.style.fontSize = "48px";
+  winnerText.style.fontSize = "36px";
   winnerText.style.color = "#66ccff";
   winnerText.style.fontFamily = "monospace";
   winnerText.style.textShadow = "0 0 15px #66ccff";
-  winnerText.style.marginBottom = "20px";
+  winnerText.style.marginBottom = "15px";
 
   const scoreText = document.createElement("div");
   scoreText.textContent = `${scoreLimit} KILLS`;
-  scoreText.style.fontSize = "32px";
+  scoreText.style.fontSize = "24px";
   scoreText.style.color = "#ffffff";
   scoreText.style.fontFamily = "monospace";
-  scoreText.style.marginBottom = "40px";
+  scoreText.style.marginBottom = "30px";
 
   const nextRoundText = document.createElement("div");
   nextRoundText.textContent = "Next round starting...";
-  nextRoundText.style.fontSize = "24px";
+  nextRoundText.style.fontSize = "18px";
   nextRoundText.style.color = "#888888";
   nextRoundText.style.fontFamily = "monospace";
 
@@ -806,6 +837,94 @@ function showRoundOverMessage(winnerName, scoreLimit) {
       overlay.remove();
     }, 500);
   }, 2500);
+}
+
+// Warmup and countdown overlay
+let warmupOverlay = null;
+let countdownOverlay = null;
+
+function showWarmupMessage() {
+  // Remove any existing overlay
+  if (warmupOverlay) warmupOverlay.remove();
+  if (countdownOverlay) countdownOverlay.remove();
+
+  warmupOverlay = document.createElement("div");
+  warmupOverlay.style.position = "fixed";
+  warmupOverlay.style.top = "100px";
+  warmupOverlay.style.left = "50%";
+  warmupOverlay.style.transform = "translateX(-50%)";
+  warmupOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+  warmupOverlay.style.border = "2px solid #ff9900";
+  warmupOverlay.style.borderRadius = "10px";
+  warmupOverlay.style.padding = "20px 40px";
+  warmupOverlay.style.zIndex = "8000";
+  warmupOverlay.style.fontFamily = "monospace";
+  warmupOverlay.style.fontSize = "24px";
+  warmupOverlay.style.color = "#ff9900";
+  warmupOverlay.style.textAlign = "center";
+  warmupOverlay.style.textShadow = "0 0 10px #ff9900";
+  warmupOverlay.textContent = "WARMUP - Get Ready!";
+
+  document.body.appendChild(warmupOverlay);
+}
+
+function showCountdownMessage() {
+  // Remove warmup overlay
+  if (warmupOverlay) {
+    warmupOverlay.remove();
+    warmupOverlay = null;
+  }
+
+  countdownOverlay = document.createElement("div");
+  countdownOverlay.style.position = "fixed";
+  countdownOverlay.style.top = "50%";
+  countdownOverlay.style.left = "50%";
+  countdownOverlay.style.transform = "translate(-50%, -50%)";
+  countdownOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
+  countdownOverlay.style.border = "4px solid #ff0000";
+  countdownOverlay.style.borderRadius = "20px";
+  countdownOverlay.style.padding = "50px 80px";
+  countdownOverlay.style.zIndex = "10000";
+  countdownOverlay.style.fontFamily = "monospace";
+  countdownOverlay.style.fontSize = "120px";
+  countdownOverlay.style.color = "#ff0000";
+  countdownOverlay.style.textAlign = "center";
+  countdownOverlay.style.textShadow = "0 0 30px #ff0000";
+  countdownOverlay.style.fontWeight = "bold";
+
+  document.body.appendChild(countdownOverlay);
+
+  // Start countdown animation
+  let countdown = 5;
+  countdownOverlay.textContent = countdown;
+
+  countdownInterval = setInterval(() => {
+    countdown--;
+    if (countdown > 0 && countdownOverlay) {
+      countdownOverlay.textContent = countdown;
+    } else if (countdown === 0 && countdownOverlay) {
+      countdownOverlay.textContent = "GO!";
+      countdownOverlay.style.color = "#00ff00";
+      countdownOverlay.style.textShadow = "0 0 30px #00ff00";
+      countdownOverlay.style.borderColor = "#00ff00";
+    }
+  }, 1000);
+}
+
+function hideCountdownMessage() {
+  if (countdownOverlay) {
+    setTimeout(() => {
+      if (countdownOverlay) {
+        countdownOverlay.style.animation = "fadeOut 0.5s";
+        setTimeout(() => {
+          if (countdownOverlay) {
+            countdownOverlay.remove();
+            countdownOverlay = null;
+          }
+        }, 500);
+      }
+    }, 500); // Show "GO!" for 500ms
+  }
 }
 
 // Visual effects
