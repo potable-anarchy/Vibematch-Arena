@@ -1,10 +1,42 @@
 // Game client
-import { AssetLoader } from "./assets.js";
+import { AssetLoader, PlayerAnimator } from "./assets.js";
 import { ModSystem } from "./modSystem.js";
 import { ModEditor } from "./modEditor.js";
 
 const socket = io();
 const assets = new AssetLoader();
+
+// Player colors for differentiation
+const PLAYER_COLORS = [
+  { name: 'blue', r: 100, g: 149, b: 237 },     // Cornflower blue
+  { name: 'red', r: 220, g: 20, b: 60 },        // Crimson
+  { name: 'green', r: 50, g: 205, b: 50 },      // Lime green
+  { name: 'yellow', r: 255, g: 215, b: 0 },     // Gold
+  { name: 'purple', r: 147, g: 112, b: 219 },   // Medium purple
+  { name: 'orange', r: 255, g: 140, b: 0 },     // Dark orange
+  { name: 'cyan', r: 0, g: 206, b: 209 },       // Dark turquoise
+  { name: 'pink', r: 255, g: 105, b: 180 },     // Hot pink
+  { name: 'lime', r: 154, g: 205, b: 50 },      // Yellow green
+  { name: 'magenta', r: 199, g: 21, b: 133 },   // Medium violet red
+  { name: 'teal', r: 0, g: 128, b: 128 },       // Teal
+  { name: 'brown', r: 139, g: 69, b: 19 },      // Saddle brown
+];
+
+// Map player IDs to colors
+const playerColorMap = new Map();
+let nextColorIndex = 0;
+
+// Get or assign color for a player
+function getPlayerColor(playerId) {
+  if (!playerColorMap.has(playerId)) {
+    playerColorMap.set(playerId, PLAYER_COLORS[nextColorIndex % PLAYER_COLORS.length]);
+    nextColorIndex++;
+  }
+  return playerColorMap.get(playerId);
+}
+
+// Player animators - one per player
+const playerAnimators = new Map();
 
 // Generate random player name
 function generatePlayerName() {
@@ -629,9 +661,15 @@ function render(dt) {
     }
   });
 
-  // Draw players (using interpolated positions)
+  // Update and draw players (using interpolated positions)
   renderState.players.forEach((p) => {
     if (p.health > 0) {
+      // Update animator
+      const animator = playerAnimators.get(p.id);
+      if (animator) {
+        animator.update(dt);
+      }
+
       drawPlayer(p);
       modSystem.callHook("onPlayerDraw", ctx, p, camera);
     }
@@ -735,17 +773,45 @@ function drawPlayer(p) {
 
   const isLocalPlayer = p.id === playerId;
 
+  // Get or create animator for this player
+  if (!playerAnimators.has(p.id)) {
+    playerAnimators.set(p.id, new PlayerAnimator());
+  }
+  const animator = playerAnimators.get(p.id);
+
+  // Get player's color
+  const playerColor = getPlayerColor(p.id);
+
+  // Determine animation based on state
+  let weaponType = 'handgun'; // default
+  if (p.weapon === 'rifle' || p.weapon === 'smg') {
+    weaponType = 'rifle';
+  }
+
+  // Determine animation state
+  let animationKey;
+  if (p.reloading) {
+    animationKey = `${weaponType}_reload`;
+    animator.setFrameDelay(40); // Slower for reload
+  } else {
+    // Check if player is moving
+    const isMoving = p.vx !== 0 || p.vy !== 0;
+    if (isMoving) {
+      animationKey = `${weaponType}_move`;
+      animator.setFrameDelay(50);
+    } else {
+      animationKey = `${weaponType}_idle`;
+      animator.setFrameDelay(60);
+    }
+  }
+
+  const animation = assets.getAnimation(animationKey);
+  const sprite = animator.getFrame(animation);
+
   ctx.save();
   ctx.translate(screenX, screenY);
   ctx.rotate(p.aimAngle);
 
-  // Determine sprite based on weapon
-  let spriteKey = isLocalPlayer ? "player_blue_gun" : "player_brown_gun";
-  if (p.weapon === "smg" || p.weapon === "rifle") {
-    spriteKey = isLocalPlayer ? "player_blue_machine" : "player_brown_machine";
-  }
-
-  const sprite = assets.get(spriteKey);
   if (sprite && sprite.complete) {
     // Draw shadow first
     ctx.globalAlpha = 0.3;
@@ -772,12 +838,30 @@ function drawPlayer(p) {
       ctx.setLineDash([]);
     }
 
-    // Draw player sprite
-    ctx.drawImage(sprite, -sprite.width / 2, -sprite.height / 2);
+    // Create colored version of sprite using canvas tinting
+    const tintCanvas = document.createElement('canvas');
+    tintCanvas.width = sprite.width;
+    tintCanvas.height = sprite.height;
+    const tintCtx = tintCanvas.getContext('2d');
+
+    // Draw original sprite
+    tintCtx.drawImage(sprite, 0, 0);
+
+    // Apply color tint
+    tintCtx.globalCompositeOperation = 'multiply';
+    tintCtx.fillStyle = `rgb(${playerColor.r}, ${playerColor.g}, ${playerColor.b})`;
+    tintCtx.fillRect(0, 0, sprite.width, sprite.height);
+
+    // Restore original alpha
+    tintCtx.globalCompositeOperation = 'destination-in';
+    tintCtx.drawImage(sprite, 0, 0);
+
+    // Draw tinted player sprite
+    ctx.drawImage(tintCanvas, -sprite.width / 2, -sprite.height / 2);
   } else {
     // Fallback to circle if sprite not loaded
     const radius = gameConfig?.PLAYER_RADIUS || 20;
-    ctx.fillStyle = isLocalPlayer ? "#66ccff" : "#ff9966";
+    ctx.fillStyle = `rgb(${playerColor.r}, ${playerColor.g}, ${playerColor.b})`;
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -793,10 +877,10 @@ function drawPlayer(p) {
 
   ctx.restore();
 
-  // Name
-  const playerRadius = gameConfig?.PLAYER_RADIUS || 20;
-  ctx.fillStyle = "#fff";
-  ctx.font = "12px monospace";
+  // Name with player color
+  const playerRadius = gameConfig?.PLAYER_RADIUS || 30;
+  ctx.fillStyle = isLocalPlayer ? "#ffff00" : "#fff";
+  ctx.font = isLocalPlayer ? "bold 14px monospace" : "12px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   ctx.fillText(p.name, screenX, screenY - playerRadius - 5);
