@@ -91,6 +91,9 @@ const soundManager = new SoundManager();
   await soundManager.preload("hit", "/assets/sounds/Hit 1.mp3", 1, 0.5);
   await soundManager.preload("death", "/assets/sounds/Game Over.mp3", 1, 0.5);
 
+  // Out of ammo click sound
+  await soundManager.preload("click", "/assets/sounds/click.mp3", 1, 0.4);
+
   console.log("✅ Realistic CS-style weapon sounds loaded!");
 })();
 
@@ -211,6 +214,16 @@ registerHook("onKill", (killerId, victimId) => {
   // Play death sound if we died
   if (victimId === playerId) {
     soundManager.play("death");
+  }
+});
+
+// Register hook for out of ammo click
+registerHook("onOutOfAmmo", (data) => {
+  const playerId = game.getPlayerId();
+
+  // Only play click sound for the local player
+  if (data.playerId === playerId) {
+    soundManager.play("click");
   }
 });
 

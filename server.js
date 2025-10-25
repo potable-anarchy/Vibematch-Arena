@@ -1575,7 +1575,16 @@ function handleShoot(player) {
   }
 
   if (player.reloading) return;
-  if (player.ammo <= 0) return;
+  if (player.ammo <= 0) {
+    // Emit out of ammo click event
+    io.emit("outOfAmmo", {
+      playerId: player.id,
+      x: player.x,
+      y: player.y,
+      weapon: player.weapon,
+    });
+    return;
+  }
 
   const weapon = WEAPONS[player.weapon];
   const now = Date.now();

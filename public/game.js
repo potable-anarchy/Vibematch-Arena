@@ -551,6 +551,11 @@ socket.on("shoot", (data) => {
   modSystem.callHook("onShoot", data);
 });
 
+socket.on("outOfAmmo", (data) => {
+  // Call mod hook to play empty gun click sound
+  modSystem.callHook("onOutOfAmmo", data);
+});
+
 socket.on("hit", (data) => {
   const target = gameState.players.find((p) => p.id === data.targetId);
   if (target) {
