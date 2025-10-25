@@ -18,17 +18,19 @@ export class ModEditor {
     this.container.id = "modEditor";
     this.container.style.cssText = `
       position: fixed;
-      top: 50%;
-      right: 20px;
-      transform: translateY(-50%);
-      width: 600px;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      max-width: 90vw;
       background: rgba(10, 10, 20, 0.98);
       border: 2px solid #00ff00;
-      border-radius: 4px;
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
       display: none;
       flex-direction: column;
       z-index: 9999;
-      box-shadow: 0 0 40px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1);
+      box-shadow: 0 -4px 40px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1);
       font-family: 'Courier New', monospace;
     `;
 

@@ -17,7 +17,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     code TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('client', 'server')),
+    type TEXT NOT NULL CHECK(type IN ('client', 'server', 'persistent')),
     user_prompt TEXT,
     created_at INTEGER NOT NULL,
     player_id TEXT,

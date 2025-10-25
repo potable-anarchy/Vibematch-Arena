@@ -13,7 +13,7 @@ export class ModHUD {
     this.container.style.cssText = `
       position: fixed;
       top: 120px;
-      left: 20px;
+      right: 20px;
       width: 280px;
       background: rgba(10, 10, 20, 0.85);
       border: 2px solid rgba(102, 204, 255, 0.5);
