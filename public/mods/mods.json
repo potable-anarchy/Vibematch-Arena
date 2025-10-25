@@ -1,9 +1,15 @@
 {
   "mods": [
     {
+      "name": "HUD Layout Manager",
+      "file": "hud-layout-manager.js",
+      "description": "Core system for managing HUD element positioning (LOAD FIRST)",
+      "enabled": true
+    },
+    {
       "name": "Walls and Obstacles",
       "file": "walls-and-obstacles.js",
-      "description": "Adds walls, cover, and crates to the map (LOAD FIRST - renders background)",
+      "description": "Adds walls, cover, and crates to the map (renders background)",
       "enabled": true
     },
     {
@@ -40,12 +46,6 @@
       "name": "Leaderboard Overlay",
       "file": "leaderboard-overlay.js",
       "description": "Press TAB to show/hide top 5 players leaderboard",
-      "enabled": true
-    },
-    {
-      "name": "HUD Layout Manager",
-      "file": "hud-layout-manager.js",
-      "description": "Core system for managing HUD element positioning (loads before HUD elements)",
       "enabled": true
     },
     {
