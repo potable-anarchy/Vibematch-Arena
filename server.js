@@ -58,11 +58,83 @@ const io = new Server(httpServer, {
 
 const PORT = process.env.PORT || 5500;
 
-// Serve static files
+// Middleware
 app.use(express.static("public"));
+app.use(express.json()); // Parse JSON request bodies
 
 app.get("/", (req, res) => {
   res.sendFile(join(__dirname, "public", "index.html"));
+});
+
+// Gemini API proxy endpoint for mod code generation
+app.post("/api/generate-mod", async (req, res) => {
+  try {
+    const { prompt, systemPrompt } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+
+    // Get Gemini API key from environment
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({
+        error: "Gemini API key not configured. Please set GEMINI_API_KEY environment variable."
+      });
+    }
+
+    // Call Gemini API
+    const geminiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+    const fullPrompt = systemPrompt ? `${systemPrompt}\n\nUser Request:\n${prompt}` : prompt;
+
+    const response = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: fullPrompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: `Gemini API error: ${response.statusText}`
+      });
+    }
+
+    const data = await response.json();
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      return res.status(500).json({ error: 'Invalid response from Gemini API' });
+    }
+
+    const generatedText = data.candidates[0].content.parts[0].text;
+
+    // Extract code from markdown blocks if present
+    const codeBlockMatch = generatedText.match(/```(?:javascript|js)?\s*([\s\S]*?)```/);
+    const code = codeBlockMatch ? codeBlockMatch[1].trim() : generatedText.trim();
+
+    res.json({ code });
+
+  } catch (error) {
+    console.error("Error in /api/generate-mod:", error);
+    res.status(500).json({
+      error: error.message || "Failed to generate code"
+    });
+  }
 });
 
 // Game state

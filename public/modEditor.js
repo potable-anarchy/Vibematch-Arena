@@ -1,9 +1,13 @@
 // In-game mod editor (non-intrusive)
+import { GeminiClient } from './geminiClient.js';
+
 export class ModEditor {
   constructor(modSystem) {
     this.modSystem = modSystem;
     this.visible = false;
     this.currentMod = "";
+    this.geminiClient = new GeminiClient();
+    this.isGenerating = false;
     this.createUI();
   }
 
@@ -99,6 +103,37 @@ export class ModEditor {
       outline: none;
     `;
     editorWrapper.appendChild(this.textarea);
+
+    // Generate Code button overlay
+    const generateButton = document.createElement("button");
+    generateButton.id = "generateCode";
+    generateButton.innerHTML = "🤖 GENERATE CODE";
+    generateButton.style.cssText = `
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      color: white;
+      padding: 8px 15px;
+      cursor: pointer;
+      border-radius: 5px;
+      font-family: monospace;
+      font-weight: bold;
+      font-size: 12px;
+      box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);
+      transition: all 0.2s;
+      z-index: 10;
+    `;
+    generateButton.onmouseover = () => {
+      generateButton.style.transform = "translateY(-2px)";
+      generateButton.style.boxShadow = "0 4px 15px rgba(102, 126, 234, 0.6)";
+    };
+    generateButton.onmouseout = () => {
+      generateButton.style.transform = "translateY(0)";
+      generateButton.style.boxShadow = "0 2px 10px rgba(102, 126, 234, 0.4)";
+    };
+    editorWrapper.appendChild(generateButton);
 
     // File browser
     const fileBrowser = document.createElement("div");
@@ -217,6 +252,9 @@ export class ModEditor {
     document
       .getElementById("loadFromFile")
       .addEventListener("click", () => this.loadSelectedFile());
+    document
+      .getElementById("generateCode")
+      .addEventListener("click", () => this.generateCode());
 
     // Make draggable
     this.makeDraggable(header);
@@ -383,6 +421,61 @@ export class ModEditor {
       }
     } catch (error) {
       this.showStatus(`❌ Error loading file: ${error.message}`, "#ff3366");
+    }
+  }
+
+  async generateCode() {
+    if (this.isGenerating) {
+      this.showStatus("⏳ Already generating code...", "#ffaa00");
+      return;
+    }
+
+    const userPrompt = this.textarea.value.trim();
+
+    if (!userPrompt) {
+      this.showStatus("❌ Please enter a description of what you want the mod to do", "#ff3366");
+      return;
+    }
+
+    const generateButton = document.getElementById("generateCode");
+    const originalButtonText = generateButton.innerHTML;
+
+    try {
+      this.isGenerating = true;
+
+      // Update button state
+      generateButton.innerHTML = "⏳ GENERATING...";
+      generateButton.style.background = "linear-gradient(135deg, #ffaa00 0%, #ff8800 100%)";
+      generateButton.disabled = true;
+      generateButton.style.cursor = "not-allowed";
+
+      this.showStatus("🤖 Generating code with AI...", "#ffaa00");
+
+      // Call Gemini API
+      const generatedCode = await this.geminiClient.generateModCode(userPrompt);
+
+      // Update textarea with generated code
+      this.textarea.value = generatedCode;
+
+      this.showStatus("✅ Code generated successfully! Review and click LOAD MOD to test.", "#66ff66");
+
+    } catch (error) {
+      console.error("Code generation error:", error);
+      this.showStatus(`❌ Generation failed: ${error.message}`, "#ff3366");
+
+      // If it's an API key error, show helpful message
+      if (error.message.includes("API") || error.message.includes("Backend")) {
+        this.showStatus("❌ API not configured. Please set up backend endpoint.", "#ff3366");
+      }
+
+    } finally {
+      this.isGenerating = false;
+
+      // Restore button state
+      generateButton.innerHTML = originalButtonText;
+      generateButton.style.background = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+      generateButton.disabled = false;
+      generateButton.style.cursor = "pointer";
     }
   }
 }
