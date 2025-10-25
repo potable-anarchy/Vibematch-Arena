@@ -148,7 +148,7 @@ let gameState = {
 // Interpolation for smooth movement
 let lastServerState = { players: [], pickups: [] };
 let serverStateTime = Date.now();
-const INTERPOLATION_DELAY = 100; // ms
+const INTERPOLATION_TIME = 100; // ms - how long to interpolate
 
 let camera = { x: 0, y: 0 };
 let input = {
@@ -337,6 +337,31 @@ socket.on("state", (state) => {
   updateHUD();
   updateScoreboard();
 });
+
+// Get interpolated game state for smooth rendering
+function getInterpolatedState() {
+  const now = Date.now();
+  const timeSinceUpdate = now - serverStateTime;
+  const t = Math.min(1, timeSinceUpdate / INTERPOLATION_TIME); // 0 to 1
+
+  // Interpolate player positions
+  const interpolatedPlayers = gameState.players.map(player => {
+    const lastPlayer = lastServerState.players.find(p => p.id === player.id);
+    if (!lastPlayer) return player;
+
+    return {
+      ...player,
+      x: lastPlayer.x + (player.x - lastPlayer.x) * t,
+      y: lastPlayer.y + (player.y - lastPlayer.y) * t,
+      aimAngle: lastPlayer.aimAngle + (player.aimAngle - lastPlayer.aimAngle) * t,
+    };
+  });
+
+  return {
+    players: interpolatedPlayers,
+    pickups: gameState.pickups,
+  };
+}
 
 socket.on("shoot", (data) => {
   createMuzzleFlash(data.x, data.y, data.angle);
@@ -543,7 +568,9 @@ function createPickupEffect(x, y) {
 function render(dt) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const player = gameState.players.find((p) => p.id === playerId);
+  // Use interpolated state for smooth rendering
+  const renderState = getInterpolatedState();
+  const player = renderState.players.find((p) => p.id === playerId);
 
   // Spectator mode - follow top scoring alive player/bot
   if (!player && isSpectator) {
@@ -551,8 +578,8 @@ function render(dt) {
     let topScorer = null;
     let topKills = -1;
 
-    // Check all players
-    for (const p of gameState.players) {
+    // Check all players (use renderState for interpolated positions)
+    for (const p of renderState.players) {
       if (p.health > 0 && p.kills > topKills) {
         topKills = p.kills;
         topScorer = p;
@@ -591,14 +618,14 @@ function render(dt) {
   drawGrid();
 
   // Draw pickups
-  gameState.pickups.forEach((pickup) => {
+  renderState.pickups.forEach((pickup) => {
     if (pickup.active) {
       drawPickup(pickup);
     }
   });
 
-  // Draw players
-  gameState.players.forEach((p) => {
+  // Draw players (using interpolated positions)
+  renderState.players.forEach((p) => {
     if (p.health > 0) {
       drawPlayer(p);
       modSystem.callHook("onPlayerDraw", ctx, p, camera);
