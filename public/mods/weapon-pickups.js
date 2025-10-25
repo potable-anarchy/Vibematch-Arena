@@ -83,10 +83,10 @@ registerHook("onRender", (ctx, camera, dt) => {
 
       // Weapon-specific scales (based on actual sprite dimensions)
       const weaponScales = {
-        pistol: 0.15, // 104x83
-        smg: 0.08, // 345x120 (largest, needs most reduction)
-        shotgun: 0.07, // 403x116 (very large)
-        rifle: 0.08, // 362x145 (large)
+        pistol: 0.2, // 104x83
+        smg: 0.11, // 345x120 (largest, needs most reduction)
+        shotgun: 0.1, // 403x116 (very large)
+        rifle: 0.11, // 362x145 (large)
       };
 
       const baseScale = weaponScales[pickup.weapon] || 0.3;
