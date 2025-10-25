@@ -525,11 +525,29 @@ function render(dt) {
 
   const player = gameState.players.find((p) => p.id === playerId);
 
-  // Spectator mode - show world center if no player yet
-  if (!player) {
-    camera.x = gameConfig?.WORLD_WIDTH / 2 || 1000;
-    camera.y = gameConfig?.WORLD_HEIGHT / 2 || 1000;
-  } else {
+  // Spectator mode - follow top scoring alive player/bot
+  if (!player && isSpectator) {
+    // Find top scoring alive player or bot
+    let topScorer = null;
+    let topKills = -1;
+
+    // Check all players
+    for (const p of gameState.players) {
+      if (p.health > 0 && p.kills > topKills) {
+        topKills = p.kills;
+        topScorer = p;
+      }
+    }
+
+    // Follow top scorer if found, otherwise center of world
+    if (topScorer) {
+      camera.x = topScorer.x;
+      camera.y = topScorer.y;
+    } else {
+      camera.x = gameConfig?.WORLD_WIDTH / 2 || 1000;
+      camera.y = gameConfig?.WORLD_HEIGHT / 2 || 1000;
+    }
+  } else if (player) {
     // Update camera to follow player
     camera.x = player.x;
     camera.y = player.y;
