@@ -407,16 +407,16 @@ const WEAPONS = {
   shotgun: {
     damage: 8,
     pellets: 10,
-    rof: 0.9,
+    rof: 1.8,
     mag: 6,
     reload: 2.5,
-    range: 300,
-    spread: 0.12,
+    range: 550,
+    spread: 0.08,
     projectileSpeed: 800, // pixels per second - slower shotgun pellets
-    // Bot tactical ranges - very aggressive close range
-    optimalRange: { min: 50, max: 150 },
+    // Bot tactical ranges - improved medium-close range
+    optimalRange: { min: 50, max: 250 },
     minEngageRange: 20,
-    maxEngageRange: 200,
+    maxEngageRange: 350,
   },
   rifle: {
     damage: 30,
