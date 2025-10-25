@@ -328,6 +328,8 @@ const GAME_CONFIG = {
   RESPAWN_DELAY: 1500, // ms
   SPAWN_INVULN_TIME: 10000, // ms
   SCORE_LIMIT: 15, // Round ends when a player reaches this kill count
+  HEADSHOT_RADIUS_RATIO: 0.2, // Headshot zone is 20% of player radius (center 4px)
+  HEADSHOT_DAMAGE_MULTIPLIER: 1.5, // Headshots deal 150% damage
 };
 
 // Sound detection ranges for bots
@@ -1624,12 +1626,19 @@ function gameLoop() {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < GAME_CONFIG.PLAYER_RADIUS + PROJECTILE_RADIUS) {
-          // Hit player
-          const killed = damagePlayer(player, proj.damage, proj.shooterId);
+          // Hit player - check if headshot
+          const headshotRadius = GAME_CONFIG.PLAYER_RADIUS * GAME_CONFIG.HEADSHOT_RADIUS_RATIO;
+          const isHeadshot = dist <= headshotRadius;
+          const finalDamage = isHeadshot
+            ? proj.damage * GAME_CONFIG.HEADSHOT_DAMAGE_MULTIPLIER
+            : proj.damage;
+
+          const killed = damagePlayer(player, finalDamage, proj.shooterId);
           io.emit("hit", {
             shooterId: proj.shooterId,
             targetId: player.id,
-            damage: proj.damage,
+            damage: finalDamage,
+            headshot: isHeadshot,
             killed,
           });
           hitSomething = true;
@@ -1651,12 +1660,19 @@ function gameLoop() {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < GAME_CONFIG.PLAYER_RADIUS + PROJECTILE_RADIUS) {
-          // Hit bot
-          const killed = damagePlayer(bot, proj.damage, proj.shooterId);
+          // Hit bot - check if headshot
+          const headshotRadius = GAME_CONFIG.PLAYER_RADIUS * GAME_CONFIG.HEADSHOT_RADIUS_RATIO;
+          const isHeadshot = dist <= headshotRadius;
+          const finalDamage = isHeadshot
+            ? proj.damage * GAME_CONFIG.HEADSHOT_DAMAGE_MULTIPLIER
+            : proj.damage;
+
+          const killed = damagePlayer(bot, finalDamage, proj.shooterId);
           io.emit("hit", {
             shooterId: proj.shooterId,
             targetId: bot.id,
-            damage: proj.damage,
+            damage: finalDamage,
+            headshot: isHeadshot,
             killed,
           });
           hitSomething = true;
