@@ -609,6 +609,12 @@ socket.on("respawn", (data) => {
   }
 });
 
+socket.on("roundOver", (data) => {
+  // Display round over message
+  showRoundOverMessage(data.winnerName, data.scoreLimit);
+  modSystem.callHook("onRoundOver", data.winnerId, data.winnerName);
+});
+
 // Send input to server
 setInterval(() => {
   const player = gameState.players.find((p) => p.id === playerId);
@@ -703,6 +709,68 @@ function showKillMessage(killerId, victimId) {
   setTimeout(() => {
     message.remove();
   }, 3000);
+}
+
+// Show round over message
+function showRoundOverMessage(winnerName, scoreLimit) {
+  const overlay = document.createElement("div");
+  overlay.style.position = "fixed";
+  overlay.style.top = "0";
+  overlay.style.left = "0";
+  overlay.style.width = "100%";
+  overlay.style.height = "100%";
+  overlay.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+  overlay.style.display = "flex";
+  overlay.style.flexDirection = "column";
+  overlay.style.justifyContent = "center";
+  overlay.style.alignItems = "center";
+  overlay.style.zIndex = "9999";
+  overlay.style.animation = "fadeIn 0.5s";
+
+  const title = document.createElement("div");
+  title.textContent = "ROUND OVER";
+  title.style.fontSize = "64px";
+  title.style.fontWeight = "bold";
+  title.style.color = "#ffff00";
+  title.style.fontFamily = "monospace";
+  title.style.textShadow = "0 0 20px #ffff00";
+  title.style.marginBottom = "30px";
+
+  const winnerText = document.createElement("div");
+  winnerText.textContent = `${winnerName} WINS!`;
+  winnerText.style.fontSize = "48px";
+  winnerText.style.color = "#66ccff";
+  winnerText.style.fontFamily = "monospace";
+  winnerText.style.textShadow = "0 0 15px #66ccff";
+  winnerText.style.marginBottom = "20px";
+
+  const scoreText = document.createElement("div");
+  scoreText.textContent = `${scoreLimit} KILLS`;
+  scoreText.style.fontSize = "32px";
+  scoreText.style.color = "#ffffff";
+  scoreText.style.fontFamily = "monospace";
+  scoreText.style.marginBottom = "40px";
+
+  const nextRoundText = document.createElement("div");
+  nextRoundText.textContent = "Next round starting...";
+  nextRoundText.style.fontSize = "24px";
+  nextRoundText.style.color = "#888888";
+  nextRoundText.style.fontFamily = "monospace";
+
+  overlay.appendChild(title);
+  overlay.appendChild(winnerText);
+  overlay.appendChild(scoreText);
+  overlay.appendChild(nextRoundText);
+
+  document.body.appendChild(overlay);
+
+  // Remove after 3 seconds
+  setTimeout(() => {
+    overlay.style.animation = "fadeOut 0.5s";
+    setTimeout(() => {
+      overlay.remove();
+    }, 500);
+  }, 2500);
 }
 
 // Visual effects
