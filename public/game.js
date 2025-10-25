@@ -1168,20 +1168,41 @@ function drawPlayer(p) {
     const scaledWidth = sprite.width * scale;
     const scaledHeight = sprite.height * scale;
 
-    // Draw invulnerability effect - pulsing circle
+    // Draw invulnerability effect - rotating particle ring
     if (p.invulnerable) {
-      // Calculate pulsing size (between 0.9 and 1.1)
-      const pulse = Math.sin(Date.now() / 150) * 0.1 + 1.0;
-      const baseRadius = Math.max(scaledWidth, scaledHeight) / 2 + 10;
+      const time = Date.now() / 1000; // Convert to seconds for smoother animation
+
+      // Calculate pulsing radius (oscillates between 0.85 and 1.15 of base)
+      const pulse = Math.sin(time * 2.5) * 0.15 + 1.0;
+      const baseRadius = Math.max(scaledWidth, scaledHeight) / 2 + 25;
       const radius = baseRadius * pulse;
 
-      ctx.strokeStyle = "#ffff00";
-      ctx.lineWidth = 3;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      // Rotation angle increases over time
+      const rotationSpeed = 2.0; // radians per second
+      const rotationOffset = time * rotationSpeed;
+
+      // Draw ring of particles
+      const particleCount = 16;
+      const particleSize = 4;
+
+      for (let i = 0; i < particleCount; i++) {
+        const angle = (Math.PI * 2 * i / particleCount) + rotationOffset;
+        const px = Math.cos(angle) * radius;
+        const py = Math.sin(angle) * radius;
+
+        // Particle glow effect
+        ctx.shadowColor = "#ffff00";
+        ctx.shadowBlur = 8;
+
+        // Draw particle
+        ctx.fillStyle = "#ffff00";
+        ctx.beginPath();
+        ctx.arc(px, py, particleSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Reset shadow
+      ctx.shadowBlur = 0;
     }
 
     // Create colored version of sprite using canvas tinting
