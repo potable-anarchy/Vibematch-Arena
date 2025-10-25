@@ -9,6 +9,20 @@ class SoundManager {
     this.context = new (window.AudioContext || window.webkitAudioContext)();
     this.buffers = {};
     this.masterVolume = 0.3;
+    this.ready = false;
+
+    // Resume audio context on first user interaction to avoid autoplay restrictions
+    const resumeAudio = async () => {
+      if (this.context.state === 'suspended') {
+        await this.context.resume();
+      }
+      this.ready = true;
+      document.removeEventListener('click', resumeAudio);
+      document.removeEventListener('keydown', resumeAudio);
+    };
+
+    document.addEventListener('click', resumeAudio);
+    document.addEventListener('keydown', resumeAudio);
   }
 
   // Preload a sound buffer
@@ -34,6 +48,11 @@ class SoundManager {
 
   // Play with specific volume override
   playWithVolume(name, volumeMultiplier = 1.0) {
+    // Ensure audio context is resumed
+    if (this.context.state === 'suspended') {
+      this.context.resume();
+    }
+
     const soundData = this.buffers[name];
     if (!soundData) return;
 
@@ -84,7 +103,7 @@ const weaponSounds = {
 
 // Track last shot time per player to avoid sound spam
 const lastShotTimes = new Map();
-const SHOT_SOUND_COOLDOWN = 100; // ms - minimum time between shot sounds
+const SHOT_SOUND_COOLDOWN = 100; // ms - minimum time between shot sounds for other players
 
 // Register hook for shooting
 registerHook('onShoot', (data) => {
@@ -97,8 +116,8 @@ registerHook('onShoot', (data) => {
   const now = Date.now();
   const lastShot = lastShotTimes.get(data.playerId) || 0;
 
-  // Throttle shot sounds to prevent audio overlap spam
-  if (now - lastShot < SHOT_SOUND_COOLDOWN) {
+  // Only throttle other players' shots, not our own (for instant feedback)
+  if (data.playerId !== playerId && now - lastShot < SHOT_SOUND_COOLDOWN) {
     return;
   }
 
