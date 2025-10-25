@@ -849,6 +849,8 @@ function gameLoop() {
           const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
           bot.vx = Math.cos(bot.wanderAngle) * moveSpeed;
           bot.vy = Math.sin(bot.wanderAngle) * moveSpeed;
+          // Look in movement direction when wandering
+          bot.aimAngle = bot.wanderAngle;
         }
       }
 
