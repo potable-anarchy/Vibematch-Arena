@@ -55,27 +55,31 @@ const soundManager = new SoundManager();
 
 // Preload all sounds asynchronously
 (async () => {
-  // Reduced pool sizes to minimize lag
-  await soundManager.preload('fire1', '/assets/sounds/Fire 1.mp3', 2, 0.4);
-  await soundManager.preload('fire2', '/assets/sounds/Fire 2.mp3', 2, 0.4);
-  await soundManager.preload('fire3', '/assets/sounds/Fire 3.mp3', 2, 0.5);
-  await soundManager.preload('fire4', '/assets/sounds/Fire 4.mp3', 2, 0.3);
-  await soundManager.preload('fire5', '/assets/sounds/Fire 5.mp3', 2, 0.5);
-  await soundManager.preload('fire6', '/assets/sounds/Fire 6.mp3', 2, 0.4);
+  // Realistic weapon sounds from public domain firearm library
+  await soundManager.preload('glock', '/assets/sounds/glock.mp3', 1, 0.6);
+  await soundManager.preload('deagle', '/assets/sounds/deagle.mp3', 1, 0.7);
+  await soundManager.preload('usp', '/assets/sounds/usp.mp3', 1, 0.5);
+  await soundManager.preload('mp5', '/assets/sounds/mp5.mp3', 1, 0.6);
+  await soundManager.preload('p90', '/assets/sounds/p90.mp3', 1, 0.6);
+  await soundManager.preload('ak47', '/assets/sounds/ak47.mp3', 1, 0.8);
+  await soundManager.preload('m4a1', '/assets/sounds/m4a1.mp3', 1, 0.7);
+  await soundManager.preload('awp', '/assets/sounds/awp.mp3', 1, 0.9);
+  await soundManager.preload('scout', '/assets/sounds/scout.mp3', 1, 0.7);
+  await soundManager.preload('shotgun', '/assets/sounds/shotgun.mp3', 1, 0.8);
 
   // Hit and death sounds
-  await soundManager.preload('hit', '/assets/sounds/Hit 1.mp3', 2, 0.5);
+  await soundManager.preload('hit', '/assets/sounds/Hit 1.mp3', 1, 0.5);
   await soundManager.preload('death', '/assets/sounds/Game Over.mp3', 1, 0.5);
 
-  console.log('✅ All sound effects loaded!');
+  console.log('✅ Realistic CS-style weapon sounds loaded!');
 })();
 
 // Map weapons to specific sounds
 const weaponSounds = {
-  pistol: 'fire1',
-  smg: 'fire4',      // Lighter, faster sound
-  shotgun: 'fire5',  // Heavier sound
-  rifle: 'fire3',    // Medium punch
+  pistol: 'glock',
+  smg: 'mp5',
+  shotgun: 'shotgun',
+  rifle: 'ak47',
 };
 
 // Track last shot time per player to avoid sound spam
