@@ -758,18 +758,18 @@ function gameLoop() {
         }
 
         // If target in range, aim and shoot
-        if (nearestTarget && nearestDist < 600) {
+        if (nearestTarget && nearestDist < 450) {
           const dx = nearestTarget.x - bot.x;
           const dy = nearestTarget.y - bot.y;
           bot.aimAngle = Math.atan2(dy, dx);
 
-          // Move towards target
-          const moveSpeed = GAME_CONFIG.PLAYER_SPEED;
+          // Move towards target (slower than player speed)
+          const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.7;
           bot.vx = Math.cos(bot.aimAngle) * moveSpeed;
           bot.vy = Math.sin(bot.aimAngle) * moveSpeed;
 
-          // Try to shoot
-          if (nearestDist < 400) {
+          // Try to shoot (with random chance to make them less accurate/aggressive)
+          if (nearestDist < 300 && Math.random() < 0.4) {
             handleShoot(bot);
           }
         } else {
