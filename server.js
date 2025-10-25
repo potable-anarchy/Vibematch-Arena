@@ -5,7 +5,15 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import "dotenv/config";
 import performanceMonitor from "./performance-monitor.js";
-import { saveMod, getModStats, getAllMods } from "./mod-database.js";
+import {
+  saveMod,
+  getModStats,
+  getAllMods,
+  addActiveMod,
+  getActiveMods,
+  cleanupExpiredMods,
+  removePlayerActiveMods,
+} from "./mod-database.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1647,6 +1655,54 @@ io.on("connection", (socket) => {
       console.error("Failed to save client mod:", error);
     }
   });
+
+  // Activate persistent mod that runs every game tick
+  socket.on("activatePersistentMod", (data) => {
+    try {
+      const { code, durationMs, name, description } = data;
+      const playerId = socket.id;
+      const player = gameState.players.get(playerId);
+
+      if (!player) {
+        socket.emit("persistentModResult", { error: "Player not found" });
+        return;
+      }
+
+      // Validate duration (max 5 minutes = 300000ms)
+      const maxDuration = 300000;
+      const duration = Math.min(durationMs || 60000, maxDuration);
+
+      console.log(
+        `⚡ Activating persistent mod for ${player.name} (${duration / 1000}s)`,
+      );
+
+      // Add to active mods database
+      const modId = addActiveMod(
+        playerId,
+        code,
+        duration,
+        name || `persistent_${Date.now()}`,
+        description,
+      );
+
+      socket.emit("persistentModResult", {
+        success: true,
+        modId: modId,
+        duration: duration,
+        message: `Persistent mod activated for ${duration / 1000} seconds`,
+      });
+
+      console.log(
+        `✅ Persistent mod ${modId} activated for ${player.name}, expires in ${duration / 1000}s`,
+      );
+    } catch (error) {
+      console.error("❌ Error activating persistent mod:", error);
+      socket.emit("persistentModResult", {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  });
 });
 
 // Handle shooting - creates projectiles instead of instant hitscan
@@ -1685,7 +1741,14 @@ function handleShoot(player) {
       const angle = player.aimAngle + spread;
 
       // Create projectile
-      createProjectile(player.x, player.y, angle, weapon, player.id, player.weapon);
+      createProjectile(
+        player.x,
+        player.y,
+        angle,
+        weapon,
+        player.id,
+        player.weapon,
+      );
     }
   } else {
     // Other weapons fire single projectile
@@ -1693,7 +1756,14 @@ function handleShoot(player) {
     const angle = player.aimAngle + bloom;
 
     // Create projectile
-    createProjectile(player.x, player.y, angle, weapon, player.id, player.weapon);
+    createProjectile(
+      player.x,
+      player.y,
+      angle,
+      weapon,
+      player.id,
+      player.weapon,
+    );
   }
 
   io.emit("shoot", {
@@ -1734,6 +1804,96 @@ const TICK_INTERVAL = 1000 / GAME_CONFIG.TICK_RATE;
 const STATE_BROADCAST_INTERVAL = 1000 / 30; // Broadcast state 30 times per second
 let lastTick = Date.now();
 let lastStateBroadcast = Date.now();
+
+// Execute active persistent mods every game tick
+function executeActiveMods(now) {
+  try {
+    const activeMods = getActiveMods();
+
+    for (const mod of activeMods) {
+      try {
+        // Create mod API for persistent mods
+        const modAPI = {
+          // Player access
+          getPlayer: (playerId) => {
+            return (
+              gameState.players.get(playerId) || gameState.bots.get(playerId)
+            );
+          },
+
+          // Get the player who created this mod
+          getMyPlayer: () => {
+            return (
+              gameState.players.get(mod.player_id) ||
+              gameState.bots.get(mod.player_id)
+            );
+          },
+
+          // Manipulation functions
+          setHealth: (targetId, health) => {
+            const target =
+              gameState.players.get(targetId) || gameState.bots.get(targetId);
+            if (target) {
+              target.health = Math.max(
+                0,
+                Math.min(GAME_CONFIG.PLAYER_MAX_HEALTH, health),
+              );
+              return true;
+            }
+            return false;
+          },
+
+          setArmor: (targetId, armor) => {
+            const target =
+              gameState.players.get(targetId) || gameState.bots.get(targetId);
+            if (target) {
+              target.armor = Math.max(0, Math.min(100, armor));
+              return true;
+            }
+            return false;
+          },
+
+          setInvulnerable: (targetId, invulnerable) => {
+            const target =
+              gameState.players.get(targetId) || gameState.bots.get(targetId);
+            if (target) {
+              // Set invulnerable to far future or 0
+              target.invulnerable = invulnerable
+                ? now + 999999999
+                : Math.min(target.invulnerable, now);
+              return true;
+            }
+            return false;
+          },
+
+          teleport: (targetId, x, y) => {
+            const target =
+              gameState.players.get(targetId) || gameState.bots.get(targetId);
+            if (target) {
+              target.x = Math.max(0, Math.min(GAME_CONFIG.WORLD_WIDTH, x));
+              target.y = Math.max(0, Math.min(GAME_CONFIG.WORLD_HEIGHT, y));
+              return true;
+            }
+            return false;
+          },
+
+          // Utility
+          now: now,
+          dt: (now - lastTick) / 1000,
+        };
+
+        // Execute the mod code
+        const modFunction = new Function("api", mod.code);
+        modFunction(modAPI);
+      } catch (error) {
+        console.error(`❌ Error executing active mod ${mod.id}:`, error);
+        // Don't remove the mod, just log the error and continue
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error in executeActiveMods:", error);
+  }
+}
 
 function gameLoop() {
   const tickStartTime = Date.now();
@@ -1783,10 +1943,11 @@ function gameLoop() {
         ) {
           // Check if rifle can penetrate wall
           const isRifle = proj.weaponName === "rifle";
-          const canPenetrate = isRifle &&
-                               !proj.hasPenetrated &&
-                               proj.weapon.wallPenetrationChance &&
-                               Math.random() < proj.weapon.wallPenetrationChance;
+          const canPenetrate =
+            isRifle &&
+            !proj.hasPenetrated &&
+            proj.weapon.wallPenetrationChance &&
+            Math.random() < proj.weapon.wallPenetrationChance;
 
           if (canPenetrate) {
             // Rifle penetrates the wall!
@@ -2764,6 +2925,9 @@ function gameLoop() {
       io.emit("state", state);
     }
 
+    // Execute active persistent mods
+    executeActiveMods(now);
+
     // Update performance metrics
     performanceMonitor.updateGameState({
       players: gameState.players.size,
@@ -2787,6 +2951,12 @@ function gameLoop() {
 // Initialize and start server
 initializePickups();
 maintainBotCount(); // Spawn initial bots
+
+// Clean up expired active mods every 10 seconds
+setInterval(() => {
+  cleanupExpiredMods();
+}, 10000);
+
 setInterval(gameLoop, TICK_INTERVAL);
 
 httpServer.listen(PORT, () => {

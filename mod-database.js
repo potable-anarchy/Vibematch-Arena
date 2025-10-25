@@ -31,6 +31,25 @@ db.exec(`
   ON mods(player_id, created_at DESC)
 `);
 
+// Create active_mods table for persistent game tick execution
+db.exec(`
+  CREATE TABLE IF NOT EXISTS active_mods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    code TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    name TEXT,
+    description TEXT
+  )
+`);
+
+// Create index for active mods queries
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_active_mods_expiry
+  ON active_mods(expires_at)
+`);
+
 console.log("✅ Mod database initialized");
 
 // Helper functions
@@ -40,14 +59,7 @@ export function saveMod(name, code, type, userPrompt = null, playerId = null) {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  const result = stmt.run(
-    name,
-    code,
-    type,
-    userPrompt,
-    Date.now(),
-    playerId,
-  );
+  const result = stmt.run(name, code, type, userPrompt, Date.now(), playerId);
 
   console.log(`💾 Saved mod "${name}" (type: ${type}) to database`);
   return result.lastInsertRowid;
@@ -103,6 +115,67 @@ export function closeDatabase() {
   db.close();
 }
 
+// Active mod management functions
+export function addActiveMod(
+  playerId,
+  code,
+  durationMs,
+  name = null,
+  description = null,
+) {
+  const stmt = db.prepare(`
+    INSERT INTO active_mods (player_id, code, created_at, expires_at, name, description)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const now = Date.now();
+  const result = stmt.run(
+    playerId,
+    code,
+    now,
+    now + durationMs,
+    name,
+    description,
+  );
+
+  console.log(
+    `⚡ Added active mod for player ${playerId}, expires in ${durationMs / 1000}s`,
+  );
+  return result.lastInsertRowid;
+}
+
+export function getActiveMods() {
+  const stmt = db.prepare(`
+    SELECT * FROM active_mods
+    WHERE expires_at > ?
+    ORDER BY created_at ASC
+  `);
+
+  return stmt.all(Date.now());
+}
+
+export function cleanupExpiredMods() {
+  const stmt = db.prepare(`
+    DELETE FROM active_mods
+    WHERE expires_at <= ?
+  `);
+
+  const result = stmt.run(Date.now());
+  if (result.changes > 0) {
+    console.log(`🧹 Cleaned up ${result.changes} expired active mods`);
+  }
+  return result.changes;
+}
+
+export function removePlayerActiveMods(playerId) {
+  const stmt = db.prepare(`
+    DELETE FROM active_mods
+    WHERE player_id = ?
+  `);
+
+  return stmt.run(playerId);
+}
+
 export default {
   saveMod,
   getModsByPlayer,
@@ -110,4 +183,8 @@ export default {
   getModStats,
   deleteMod,
   closeDatabase,
+  addActiveMod,
+  getActiveMods,
+  cleanupExpiredMods,
+  removePlayerActiveMods,
 };
