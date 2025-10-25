@@ -169,13 +169,14 @@ const ctx = canvas.getContext("2d");
 })();
 
 // HUD elements
-const healthBar = document.getElementById("healthBar");
-const healthText = document.getElementById("healthText");
-const armorBar = document.getElementById("armorBar");
-const armorText = document.getElementById("armorText");
-const weaponName = document.getElementById("weaponName");
-const ammoCount = document.getElementById("ammoCount");
-const reloadIndicator = document.getElementById("reloadIndicator");
+// Bottom HUD elements removed - using mod system for HUD
+// const healthBar = document.getElementById("healthBar");
+// const healthText = document.getElementById("healthText");
+// const armorBar = document.getElementById("armorBar");
+// const armorText = document.getElementById("armorText");
+// const weaponName = document.getElementById("weaponName");
+// const ammoCount = document.getElementById("ammoCount");
+// const reloadIndicator = document.getElementById("reloadIndicator");
 const scoreboardContent = document.getElementById("scoreboardContent");
 const killfeed = document.getElementById("killfeed");
 const respawnMessage = document.getElementById("respawnMessage");
@@ -649,18 +650,14 @@ function updateHUD() {
 
   if (!displayPlayer) return;
 
-  // Health
-  healthBar.style.width = `${displayPlayer.health}%`;
-  healthText.textContent = Math.ceil(displayPlayer.health);
-
-  // Armor
-  armorBar.style.width = `${displayPlayer.armor}%`;
-  armorText.textContent = Math.ceil(displayPlayer.armor);
-
-  // Weapon
-  weaponName.textContent = displayPlayer.weapon.toUpperCase();
-  ammoCount.textContent = `${displayPlayer.ammo} / ${weapons[displayPlayer.weapon].mag}`;
-  reloadIndicator.style.display = displayPlayer.reloading ? "block" : "none";
+  // Bottom HUD elements removed - updates handled by mod system
+  // healthBar.style.width = `${displayPlayer.health}%`;
+  // healthText.textContent = Math.ceil(displayPlayer.health);
+  // armorBar.style.width = `${displayPlayer.armor}%`;
+  // armorText.textContent = Math.ceil(displayPlayer.armor);
+  // weaponName.textContent = displayPlayer.weapon.toUpperCase();
+  // ammoCount.textContent = `${displayPlayer.ammo} / ${weapons[displayPlayer.weapon].mag}`;
+  // reloadIndicator.style.display = displayPlayer.reloading ? "block" : "none";
 
   // Respawn (only show for own player)
   if (displayPlayer.id === playerId && displayPlayer.health <= 0) {
