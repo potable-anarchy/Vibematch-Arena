@@ -75,24 +75,5 @@ setTimeout(() => {
     }
   });
 
-  // Register speed indicator (SW corner, low priority)
-  window.HUDLayoutManager.register('speed-indicator', {
-    position: 'SW',
-    priority: 10,
-    width: 120,
-    height: 20,
-    render: (ctx, x, y) => {
-      const state = game.getState();
-      const myPlayer = state.players.find(p => p.id === game.getPlayerId());
-      if (!myPlayer) return;
-
-      const speed = Math.sqrt((myPlayer.vx || 0) ** 2 + (myPlayer.vy || 0) ** 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(`Speed: ${Math.round(speed)}`, x, y + 12);
-    }
-  });
-
   console.log('✅ Better HUD v2 loaded (using Layout Manager)');
 }, 200);
