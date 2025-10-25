@@ -1,5 +1,5 @@
 // In-game mod editor (non-intrusive)
-import { GeminiClient } from './geminiClient.js';
+import { GeminiClient } from "./geminiClient.js";
 
 export class ModEditor {
   constructor(modSystem) {
@@ -433,7 +433,10 @@ export class ModEditor {
     const userPrompt = this.textarea.value.trim();
 
     if (!userPrompt) {
-      this.showStatus("❌ Please enter a description of what you want the mod to do", "#ff3366");
+      this.showStatus(
+        "❌ Please enter a description of what you want the mod to do",
+        "#ff3366",
+      );
       return;
     }
 
@@ -445,7 +448,8 @@ export class ModEditor {
 
       // Update button state
       generateButton.innerHTML = "⏳ GENERATING...";
-      generateButton.style.background = "linear-gradient(135deg, #ffaa00 0%, #ff8800 100%)";
+      generateButton.style.background =
+        "linear-gradient(135deg, #ffaa00 0%, #ff8800 100%)";
       generateButton.disabled = true;
       generateButton.style.cursor = "not-allowed";
 
@@ -457,23 +461,22 @@ export class ModEditor {
       // Update textarea with generated code
       this.textarea.value = generatedCode;
 
-      this.showStatus("✅ Code generated successfully! Review and click LOAD MOD to test.", "#66ff66");
-
+      this.showStatus(
+        "✅ Code generated successfully! Review and click LOAD MOD to test.",
+        "#66ff66",
+      );
     } catch (error) {
       console.error("Code generation error:", error);
-      this.showStatus(`❌ Generation failed: ${error.message}`, "#ff3366");
 
-      // If it's an API key error, show helpful message
-      if (error.message.includes("API") || error.message.includes("Backend")) {
-        this.showStatus("❌ API not configured. Please set up backend endpoint.", "#ff3366");
-      }
-
+      // Show the actual error message from the server
+      this.showStatus(`❌ ${error.message}`, "#ff3366");
     } finally {
       this.isGenerating = false;
 
       // Restore button state
       generateButton.innerHTML = originalButtonText;
-      generateButton.style.background = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+      generateButton.style.background =
+        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
       generateButton.disabled = false;
       generateButton.style.cursor = "pointer";
     }
