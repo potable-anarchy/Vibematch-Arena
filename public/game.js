@@ -575,6 +575,10 @@ socket.on("wallImpact", (data) => {
   createWallImpactEffect(data.x, data.y, data.angle);
 });
 
+socket.on("wallPenetration", (data) => {
+  createWallPenetrationEffect(data.x, data.y, data.angle);
+});
+
 socket.on("respawn", (data) => {
   if (data.playerId === playerId) {
     respawnMessage.style.display = "none";
@@ -839,6 +843,42 @@ function createWallImpactEffect(x, y, angle) {
       life: 0.3 + Math.random() * 0.2,
       maxLife: 0.5,
       color: "#aaaaaa", // Gray dust/debris color
+      size: 2 + Math.random() * 2,
+    });
+  }
+}
+
+function createWallPenetrationEffect(x, y, angle) {
+  // Create bright particles bursting through wall
+  // More dramatic than wall impact - bullet going THROUGH
+  for (let i = 0; i < 8; i++) {
+    // Particles fly in bullet direction (penetrating through)
+    const spreadAngle = angle + (Math.random() - 0.5) * 0.6;
+    const speed = 120 + Math.random() * 180;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(spreadAngle) * speed,
+      vy: Math.sin(spreadAngle) * speed,
+      life: 0.4 + Math.random() * 0.3,
+      maxLife: 0.7,
+      color: "#ffaa00", // Bright orange for penetration
+      size: 2 + Math.random() * 3,
+    });
+  }
+
+  // Add some debris particles too
+  for (let i = 0; i < 4; i++) {
+    const spreadAngle = angle + Math.PI + (Math.random() - 0.5) * 1.5;
+    const speed = 60 + Math.random() * 100;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(spreadAngle) * speed,
+      vy: Math.sin(spreadAngle) * speed,
+      life: 0.3 + Math.random() * 0.2,
+      maxLife: 0.5,
+      color: "#888888", // Gray debris
       size: 2 + Math.random() * 2,
     });
   }
