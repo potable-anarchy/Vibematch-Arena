@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import "dotenv/config";
+import performanceMonitor from "./performance-monitor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,7 +62,25 @@ const PORT = process.env.PORT || 5500;
 
 // Health check endpoint for Render (must be before static middleware)
 app.get("/health", (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()}`;
+  performanceMonitor.startRequest(requestId, "/health");
   res.status(200).json({ status: "healthy", bots: gameState.bots.size });
+  performanceMonitor.endRequest(requestId);
+});
+
+// Performance metrics API endpoints (for admin dashboard)
+app.get("/api/metrics", (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()}`;
+  performanceMonitor.startRequest(requestId, "/api/metrics");
+  res.json(performanceMonitor.getMetrics());
+  performanceMonitor.endRequest(requestId);
+});
+
+app.get("/api/metrics/summary", (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()}`;
+  performanceMonitor.startRequest(requestId, "/api/metrics/summary");
+  res.json(performanceMonitor.getSummary());
+  performanceMonitor.endRequest(requestId);
 });
 
 // Middleware
@@ -137,8 +156,12 @@ Now generate the mod code based on the user's request.`;
 
 // Test endpoint to check available Gemini models
 app.get("/api/test-gemini", async (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()}`;
+  performanceMonitor.startRequest(requestId, "/api/test-gemini");
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    performanceMonitor.endRequest(requestId, true);
     return res.status(503).json({ error: "GEMINI_API_KEY not set" });
   }
 
@@ -150,26 +173,33 @@ app.get("/api/test-gemini", async (req, res) => {
 
     if (modelsResponse.ok) {
       const models = await modelsResponse.json();
+      performanceMonitor.endRequest(requestId);
       return res.json({
         available: true,
         models: models.models?.map((m) => m.name) || [],
       });
     } else {
+      performanceMonitor.endRequest(requestId, true);
       return res.status(modelsResponse.status).json({
         error: `API key test failed: ${modelsResponse.statusText}`,
       });
     }
   } catch (error) {
+    performanceMonitor.endRequest(requestId, true);
     return res.status(500).json({ error: error.message });
   }
 });
 
 // Gemini API proxy endpoint for mod code generation
 app.post("/api/generate-mod", async (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()}`;
+  performanceMonitor.startRequest(requestId, "/api/generate-mod");
+
   try {
     const { prompt } = req.body;
 
     if (!prompt) {
+      performanceMonitor.endRequest(requestId, true);
       return res.status(400).json({ error: "Prompt is required" });
     }
 
@@ -179,6 +209,7 @@ app.post("/api/generate-mod", async (req, res) => {
       console.warn(
         "GEMINI_API_KEY not configured - AI code generation disabled",
       );
+      performanceMonitor.endRequest(requestId, true);
       return res.status(503).json({
         error:
           "AI code generation is not available. GEMINI_API_KEY environment variable is not set.",
@@ -225,11 +256,13 @@ app.post("/api/generate-mod", async (req, res) => {
 
       // More specific error messages
       if (response.status === 404) {
+        performanceMonitor.endRequest(requestId, true);
         return res.status(404).json({
           error: `Gemini API model not found. Check if gemini-1.5-flash is available in your region or API key permissions.`,
         });
       }
 
+      performanceMonitor.endRequest(requestId, true);
       return res.status(response.status).json({
         error: `Gemini API error: ${response.statusText}`,
       });
@@ -242,6 +275,7 @@ app.post("/api/generate-mod", async (req, res) => {
       !data.candidates[0] ||
       !data.candidates[0].content
     ) {
+      performanceMonitor.endRequest(requestId, true);
       return res
         .status(500)
         .json({ error: "Invalid response from Gemini API" });
@@ -257,9 +291,11 @@ app.post("/api/generate-mod", async (req, res) => {
       ? codeBlockMatch[1].trim()
       : generatedText.trim();
 
+    performanceMonitor.endRequest(requestId);
     res.json({ code });
   } catch (error) {
     console.error("Error in /api/generate-mod:", error);
+    performanceMonitor.endRequest(requestId, true);
     res.status(500).json({
       error: error.message || "Failed to generate code",
     });
@@ -1122,6 +1158,25 @@ function raycast(x, y, angle, range, shooterId) {
   return closestHit;
 }
 
+// Performance monitoring WebSocket namespace
+const performanceIO = io.of("/performance");
+performanceIO.on("connection", (socket) => {
+  console.log("Performance monitor connected:", socket.id);
+
+  // Send initial metrics
+  socket.emit("metrics", performanceMonitor.getMetrics());
+
+  socket.on("disconnect", () => {
+    console.log("Performance monitor disconnected:", socket.id);
+  });
+});
+
+// Broadcast metrics to all performance monitors every second
+setInterval(() => {
+  const metrics = performanceMonitor.getMetrics();
+  performanceIO.emit("metrics", metrics);
+}, 1000);
+
 // Socket.io connection handling
 io.on("connection", (socket) => {
   console.log("Player connected:", socket.id);
@@ -1461,6 +1516,8 @@ let lastTick = Date.now();
 let lastStateBroadcast = Date.now();
 
 function gameLoop() {
+  const tickStartTime = Date.now();
+
   try {
     const now = Date.now();
     const dt = (now - lastTick) / 1000; // seconds
@@ -2324,8 +2381,24 @@ function gameLoop() {
         })),
       };
 
+      const stateString = JSON.stringify(state);
+      performanceMonitor.recordMessage(Buffer.byteLength(stateString, 'utf8'));
       io.emit("state", state);
     }
+
+    // Update performance metrics
+    performanceMonitor.updateGameState({
+      players: gameState.players.size,
+      bots: gameState.bots.size,
+      projectiles: gameState.projectiles.length,
+      pickups: gameState.pickups.filter(p => p.active).length,
+    });
+    performanceMonitor.updateConnectionCount(io.engine.clientsCount);
+
+    // Record tick time
+    const tickEndTime = Date.now();
+    const tickDuration = tickEndTime - tickStartTime;
+    performanceMonitor.recordTick(tickDuration);
   } catch (error) {
     console.error("❌ Error in game loop:", error);
     console.error("Stack:", error.stack);
