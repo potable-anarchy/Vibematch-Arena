@@ -235,6 +235,38 @@ function circleRectCollision(cx, cy, radius, rx, ry, rw, rh) {
   return distSquared < (radius * radius);
 }
 
+// Find nearest cover (wall or crate) relative to enemy position
+function findNearestCover(botX, botY, enemyX, enemyY, maxDist = 250) {
+  let bestCover = null;
+  let bestScore = -Infinity;
+
+  const allObstacles = [...WALLS, ...CRATES.map(c => ({ x: c.x, y: c.y, width: c.size, height: c.size }))];
+
+  for (const obstacle of allObstacles) {
+    const coverX = obstacle.x + obstacle.width / 2;
+    const coverY = obstacle.y + obstacle.height / 2;
+
+    // Distance from bot to cover
+    const distToCover = Math.sqrt((coverX - botX) ** 2 + (coverY - botY) ** 2);
+    if (distToCover > maxDist || distToCover < 50) continue;
+
+    // Check if cover is between bot and enemy
+    const coverToEnemyDist = Math.sqrt((enemyX - coverX) ** 2 + (enemyY - coverY) ** 2);
+    const botToEnemyDist = Math.sqrt((enemyX - botX) ** 2 + (enemyY - botY) ** 2);
+
+    // Prefer cover that's closer and blocks line to enemy
+    const blocksEnemy = coverToEnemyDist < botToEnemyDist ? 2.0 : 0.3;
+    const score = (1 / (distToCover + 1)) * blocksEnemy;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestCover = { x: coverX, y: coverY };
+    }
+  }
+
+  return bestCover;
+}
+
 // Check if position collides with any walls or crates
 function checkWallCollision(x, y, radius) {
   // Check walls
@@ -764,19 +796,48 @@ function gameLoop() {
           }
         }
 
-        // If target in range, aim and shoot
+        // If target in range, engage tactically
         if (nearestTarget && nearestDist < 450) {
           const dx = nearestTarget.x - bot.x;
           const dy = nearestTarget.y - bot.y;
           bot.aimAngle = Math.atan2(dy, dx);
 
-          // Move towards target (slower than player speed)
-          const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.7;
-          bot.vx = Math.cos(bot.aimAngle) * moveSpeed;
-          bot.vy = Math.sin(bot.aimAngle) * moveSpeed;
+          const IDEAL_COMBAT_RANGE = 200; // Maintain this distance
+          const MIN_COMBAT_RANGE = 100; // Too close, back up
 
-          // Try to shoot (with random chance to make them less accurate/aggressive)
-          if (nearestDist < 300 && Math.random() < 0.4) {
+          // Try to find cover
+          const cover = findNearestCover(bot.x, bot.y, nearestTarget.x, nearestTarget.y);
+
+          // Movement logic based on distance and cover
+          if (nearestDist < MIN_COMBAT_RANGE) {
+            // Too close - back away while shooting
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
+            bot.vx = -Math.cos(bot.aimAngle) * moveSpeed;
+            bot.vy = -Math.sin(bot.aimAngle) * moveSpeed;
+          } else if (cover && nearestDist > 150) {
+            // Move toward cover when at medium range
+            const coverDx = cover.x - bot.x;
+            const coverDy = cover.y - bot.y;
+            const coverAngle = Math.atan2(coverDy, coverDx);
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.4;
+            bot.vx = Math.cos(coverAngle) * moveSpeed;
+            bot.vy = Math.sin(coverAngle) * moveSpeed;
+          } else if (nearestDist > IDEAL_COMBAT_RANGE + 50) {
+            // Too far - move closer
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.4;
+            bot.vx = Math.cos(bot.aimAngle) * moveSpeed;
+            bot.vy = Math.sin(bot.aimAngle) * moveSpeed;
+          } else {
+            // Good range - strafe to make harder target
+            const strafeAngle = bot.aimAngle + Math.PI / 2;
+            const strafeDir = Math.random() > 0.5 ? 1 : -1;
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.3;
+            bot.vx = Math.cos(strafeAngle) * moveSpeed * strafeDir;
+            bot.vy = Math.sin(strafeAngle) * moveSpeed * strafeDir;
+          }
+
+          // Shoot when in good range
+          if (nearestDist >= MIN_COMBAT_RANGE && nearestDist <= 350 && Math.random() < 0.5) {
             handleShoot(bot);
           }
         } else {
