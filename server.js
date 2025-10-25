@@ -90,6 +90,7 @@ const GAME_CONFIG = {
   PLAYER_START_ARMOR: 0,
   RESPAWN_DELAY: 1500, // ms
   SPAWN_INVULN_TIME: 600, // ms
+  SCORE_LIMIT: 15, // Round ends when a player reaches this kill count
 };
 
 // Sound detection ranges for bots
@@ -714,6 +715,32 @@ function createPlayer(id, name) {
   };
 }
 
+// Reset round - clears all scores and respawns everyone
+function resetRound(winnerId, winnerName) {
+  console.log(`🏆 ROUND OVER! Winner: ${winnerName} with ${GAME_CONFIG.SCORE_LIMIT} kills`);
+
+  // Announce winner to all clients
+  io.emit("roundOver", {
+    winnerId,
+    winnerName,
+    scoreLimit: GAME_CONFIG.SCORE_LIMIT,
+  });
+
+  // Reset all player scores
+  for (const [id, player] of gameState.players) {
+    player.kills = 0;
+    player.deaths = 0;
+  }
+
+  // Reset all bot scores
+  for (const [id, bot] of gameState.bots) {
+    bot.kills = 0;
+    bot.deaths = 0;
+  }
+
+  console.log(`🔄 Round reset - all scores cleared`);
+}
+
 // Handle player damage
 function damagePlayer(player, damage, attackerId) {
   if (player.invulnerable > Date.now()) return false;
@@ -734,10 +761,28 @@ function damagePlayer(player, damage, attackerId) {
       const attacker = gameState.players.get(attackerId);
       if (attacker) {
         attacker.kills++;
+
+        // Check if attacker reached score limit
+        if (attacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+          // Reset round after a short delay (3 seconds)
+          setTimeout(() => {
+            resetRound(attacker.id, attacker.name);
+          }, 3000);
+        }
       } else {
         // Check if attacker is a bot
         const botAttacker = gameState.bots.get(attackerId);
-        if (botAttacker) botAttacker.kills++;
+        if (botAttacker) {
+          botAttacker.kills++;
+
+          // Check if bot reached score limit
+          if (botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+            // Reset round after a short delay (3 seconds)
+            setTimeout(() => {
+              resetRound(botAttacker.id, botAttacker.name);
+            }, 3000);
+          }
+        }
       }
     }
     player.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
