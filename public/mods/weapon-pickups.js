@@ -80,9 +80,10 @@ registerHook("onRender", (ctx, camera, dt) => {
     ) {
       // Pulsing effect
       const pulse = Math.sin(Date.now() / 300) * 0.15 + 0.85;
-      const size = PICKUP_RADIUS * pulse;
+      const baseScale = 1.2;
+      const scale = baseScale * pulse;
 
-      // Weapon colors
+      // Weapon colors for glow and labels
       const colors = {
         pistol: "#cccccc",
         smg: "#66ccff",
@@ -92,43 +93,74 @@ registerHook("onRender", (ctx, camera, dt) => {
 
       const color = colors[pickup.weapon] || "#ffffff";
 
-      // Glow
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 15;
+      // Get weapon sprite from asset loader
+      const assetKey = `weapon_${pickup.weapon}`;
+      const weaponImg = game.getAssets().get(assetKey);
 
-      // Background circle
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, size + 5, 0, Math.PI * 2);
-      ctx.fill();
+      if (weaponImg) {
+        // Draw weapon sprite with glow
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
 
-      // Weapon icon circle
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
-      ctx.fill();
+        // Background circle for contrast
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.beginPath();
+        ctx.arc(0, 0, 35 * pulse, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.shadowBlur = 0;
+        // Glow effect
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 20;
 
-      // Weapon symbol
-      ctx.fillStyle = "#000";
-      ctx.font = "bold 16px monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
+        // Draw weapon sprite scaled and centered
+        const spriteWidth = weaponImg.width * scale;
+        const spriteHeight = weaponImg.height * scale;
+        ctx.drawImage(
+          weaponImg,
+          -spriteWidth / 2,
+          -spriteHeight / 2,
+          spriteWidth,
+          spriteHeight,
+        );
 
-      const symbols = {
-        pistol: "P",
-        smg: "S",
-        shotgun: "SG",
-        rifle: "R",
-      };
+        ctx.shadowBlur = 0;
+        ctx.restore();
 
-      ctx.fillText(symbols[pickup.weapon] || "?", pos.x, pos.y);
+        // Weapon name label
+        ctx.fillStyle = color;
+        ctx.font = "bold 12px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(pickup.weapon.toUpperCase(), pos.x, pos.y + 40);
+      } else {
+        // Fallback to circles if sprite not loaded
+        const size = PICKUP_RADIUS * pulse;
 
-      // Weapon name label
-      ctx.fillStyle = color;
-      ctx.font = "bold 12px monospace";
-      ctx.fillText(pickup.weapon.toUpperCase(), pos.x, pos.y + size + 15);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15;
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, size + 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = "#000";
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(pickup.weapon[0].toUpperCase(), pos.x, pos.y);
+
+        ctx.fillStyle = color;
+        ctx.font = "bold 12px monospace";
+        ctx.fillText(pickup.weapon.toUpperCase(), pos.x, pos.y + size + 15);
+      }
 
       // Check distance to player
       if (myPlayer && myPlayer.health > 0) {
@@ -138,9 +170,11 @@ registerHook("onRender", (ctx, camera, dt) => {
 
         if (dist < COLLECT_DISTANCE) {
           // Collection prompt
-          ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
           ctx.font = "bold 10px monospace";
-          ctx.fillText("Press E", pos.x, pos.y + size + 28);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("Press E", pos.x, pos.y + 52);
         }
       }
     }

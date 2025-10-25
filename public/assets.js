@@ -35,6 +35,12 @@ export class AssetLoader {
       { key: "tile_concrete", src: "/assets/PNG/Tiles/tile_01.png" },
       { key: "tile_wall", src: "/assets/PNG/Tiles/tile_45.png" },
       { key: "tile_crate", src: "/assets/PNG/Tiles/tile_134.png" },
+
+      // Weapon pickups
+      { key: "weapon_pistol", src: "/assets/weapons/weapon_pistol.png" },
+      { key: "weapon_smg", src: "/assets/weapons/weapon_smg.png" },
+      { key: "weapon_shotgun", src: "/assets/weapons/weapon_shotgun.png" },
+      { key: "weapon_rifle", src: "/assets/weapons/weapon_rifle.png" },
     ];
 
     this.totalAssets = assetList.length;
