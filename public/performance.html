@@ -1289,6 +1289,25 @@
             function updateChartsWithHistoricalData(data) {
                 if (!data || data.length === 0) {
                     console.log("No historical data to display");
+                    // Clear charts if no data
+                    tickChart.data.labels = [];
+                    tickChart.data.datasets[0].data = [];
+                    memoryChart.data.labels = [];
+                    memoryChart.data.datasets[0].data = [];
+                    playerChart.data.labels = [];
+                    playerChart.data.datasets[0].data = [];
+                    ticksChart.data.labels = [];
+                    ticksChart.data.datasets[0].data = [];
+                    gameStatsChart.data.labels = [];
+                    gameStatsChart.data.datasets[0].data = [];
+                    gameStatsChart.data.datasets[1].data = [];
+                    gameStatsChart.data.datasets[2].data = [];
+
+                    tickChart.update();
+                    memoryChart.update();
+                    playerChart.update();
+                    ticksChart.update();
+                    gameStatsChart.update();
                     return;
                 }
 
@@ -1362,12 +1381,14 @@
                     }
                 });
 
-                // Update all charts
-                tickChart.update();
-                memoryChart.update();
-                playerChart.update();
-                ticksChart.update();
-                gameStatsChart.update();
+                // Update all charts with animation disabled for smooth transition
+                tickChart.update('none');
+                memoryChart.update('none');
+                playerChart.update('none');
+                ticksChart.update('none');
+                gameStatsChart.update('none');
+
+                console.log("Charts updated with historical data, ready for live updates");
             }
 
             // Calculate aggregated metrics from historical data
