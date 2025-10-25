@@ -71,6 +71,7 @@ const gameState = {
   nextProjectileId: 0,
   nextPickupId: 0,
   nextBotId: 0,
+  soundEvents: [], // Sound events for bots to hear (gunshots, footsteps)
 };
 
 // Game constants
@@ -86,6 +87,13 @@ const GAME_CONFIG = {
   PLAYER_START_ARMOR: 0,
   RESPAWN_DELAY: 1500, // ms
   SPAWN_INVULN_TIME: 600, // ms
+};
+
+// Sound detection ranges for bots
+const SOUND_CONFIG = {
+  GUNSHOT_RANGE: 600, // Bots can hear gunshots within this range
+  FOOTSTEP_RANGE: 150, // Bots can hear footsteps within this range
+  SOUND_LIFETIME: 500, // ms - how long a sound event lasts
 };
 
 // Weapon configs
@@ -286,6 +294,56 @@ function checkWallCollision(x, y, radius) {
   return false;
 }
 
+// Check line of sight between two points (for vision and sound propagation)
+function hasLineOfSight(x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance < 1) return true; // Same position
+
+  const angle = Math.atan2(dy, dx);
+  const rayDx = Math.cos(angle);
+  const rayDy = Math.sin(angle);
+
+  // Check walls
+  for (const wall of WALLS) {
+    const dist = rayRectIntersection(x1, y1, rayDx, rayDy, distance, wall.x, wall.y, wall.width, wall.height);
+    if (dist !== null && dist < distance) {
+      return false; // Wall blocks line of sight
+    }
+  }
+
+  // Check crates
+  for (const crate of CRATES) {
+    const dist = rayRectIntersection(x1, y1, rayDx, rayDy, distance, crate.x, crate.y, crate.size, crate.size);
+    if (dist !== null && dist < distance) {
+      return false; // Crate blocks line of sight
+    }
+  }
+
+  return true; // Clear line of sight
+}
+
+// Create a sound event that bots can hear
+function createSoundEvent(x, y, type, sourceId) {
+  const now = Date.now();
+  gameState.soundEvents.push({
+    x,
+    y,
+    type, // 'gunshot' or 'footstep'
+    sourceId,
+    createdAt: now,
+    expiresAt: now + SOUND_CONFIG.SOUND_LIFETIME,
+  });
+}
+
+// Clean up expired sound events
+function cleanupSoundEvents() {
+  const now = Date.now();
+  gameState.soundEvents = gameState.soundEvents.filter(event => event.expiresAt > now);
+}
+
 // Get spawn point farthest from other players and bots
 function getSpawnPoint(players) {
   let bestSpawn = SPAWN_POINTS[0];
@@ -359,8 +417,10 @@ function createBot() {
     reloadFinish: 0,
     invulnerable: Date.now() + GAME_CONFIG.SPAWN_INVULN_TIME,
     respawnAt: null,
+    lastFootstepSound: 0,
     // Bot AI state
     target: null,
+    lastHeardSound: null, // Last sound event this bot heard
     wanderAngle: Math.random() * Math.PI * 2,
     wanderTimer: Date.now() + Math.random() * 3000,
     thinkTimer: Date.now(),
@@ -434,6 +494,7 @@ function createPlayer(id, name) {
     reloadFinish: 0,
     invulnerable: Date.now() + GAME_CONFIG.SPAWN_INVULN_TIME,
     respawnAt: null,
+    lastFootstepSound: 0,
   };
 }
 
@@ -733,6 +794,9 @@ function handleShoot(player) {
     angle: player.aimAngle,
     weapon: player.weapon,
   });
+
+  // Create gunshot sound event for bots to hear
+  createSoundEvent(player.x, player.y, 'gunshot', player.id);
 }
 
 // Game loop
@@ -746,6 +810,9 @@ function gameLoop() {
     const now = Date.now();
     const dt = (now - lastTick) / 1000; // seconds
     lastTick = now;
+
+    // Clean up expired sound events
+    cleanupSoundEvents();
 
     // Update bots AI
     for (const [id, bot] of gameState.bots) {
@@ -770,31 +837,64 @@ function gameLoop() {
       if (now > bot.thinkTimer) {
         bot.thinkTimer = now + 200;
 
-        // Find nearest target (human players or other bots)
+        // LISTEN for sounds (gunshots and footsteps)
+        let heardSound = null;
+        for (const sound of gameState.soundEvents) {
+          if (sound.sourceId === id) continue; // Don't hear own sounds
+
+          const dx = sound.x - bot.x;
+          const dy = sound.y - bot.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          // Check if sound is within hearing range
+          const hearingRange = sound.type === 'gunshot' ? SOUND_CONFIG.GUNSHOT_RANGE : SOUND_CONFIG.FOOTSTEP_RANGE;
+
+          if (dist < hearingRange) {
+            // Remember this sound (investigate location even if can't see source)
+            if (!heardSound || dist < heardSound.dist) {
+              heardSound = { x: sound.x, y: sound.y, dist, type: sound.type };
+            }
+          }
+        }
+
+        // Store the most recent heard sound for investigation
+        if (heardSound) {
+          bot.lastHeardSound = heardSound;
+        }
+
+        // Find nearest VISIBLE target (human players or other bots)
         let nearestTarget = null;
         let nearestDist = Infinity;
 
-        // Check human players
+        // Check human players - only if bot can see them
         for (const player of gameState.players.values()) {
           if (player.health <= 0) continue;
           const dx = player.x - bot.x;
           const dy = player.y - bot.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < nearestDist) {
-            nearestDist = dist;
-            nearestTarget = player;
+
+          // Only consider targets within vision range AND with clear line of sight
+          if (dist < 600 && hasLineOfSight(bot.x, bot.y, player.x, player.y)) {
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestTarget = player;
+            }
           }
         }
 
-        // Check other bots
+        // Check other bots - only if bot can see them
         for (const [otherId, otherBot] of gameState.bots) {
           if (otherId === id || otherBot.health <= 0) continue;
           const dx = otherBot.x - bot.x;
           const dy = otherBot.y - bot.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < nearestDist) {
-            nearestDist = dist;
-            nearestTarget = otherBot;
+
+          // Only consider targets within vision range AND with clear line of sight
+          if (dist < 600 && hasLineOfSight(bot.x, bot.y, otherBot.x, otherBot.y)) {
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestTarget = otherBot;
+            }
           }
         }
 
@@ -845,12 +945,31 @@ function gameLoop() {
             bot.vy = Math.sin(strafeAngle) * moveSpeed * strafeDir;
           }
 
-          // Shoot when in good range
+          // Shoot when in good range AND has clear line of sight
           if (nearestDist >= MIN_COMBAT_RANGE && nearestDist <= 350 && Math.random() < 0.5) {
-            handleShoot(bot);
+            // Double-check line of sight before shooting (in case target moved behind cover)
+            if (hasLineOfSight(bot.x, bot.y, nearestTarget.x, nearestTarget.y)) {
+              handleShoot(bot);
+            }
+          }
+        } else if (bot.lastHeardSound && bot.lastHeardSound.dist > 50) {
+          // INVESTIGATE heard sound - move toward it
+          const dx = bot.lastHeardSound.x - bot.x;
+          const dy = bot.lastHeardSound.y - bot.y;
+          const angleToSound = Math.atan2(dy, dx);
+
+          const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.6;
+          bot.vx = Math.cos(angleToSound) * moveSpeed;
+          bot.vy = Math.sin(angleToSound) * moveSpeed;
+          bot.aimAngle = angleToSound;
+
+          // Clear heard sound once we're close to the location
+          if (bot.lastHeardSound.dist < 50) {
+            bot.lastHeardSound = null;
           }
         } else {
-          // Wander randomly
+          // Wander randomly (no target and no sounds heard)
+          bot.lastHeardSound = null; // Clear old sound
           if (now > bot.wanderTimer) {
             bot.wanderAngle = Math.random() * Math.PI * 2;
             bot.wanderTimer = now + 2000 + Math.random() * 2000;
@@ -867,8 +986,10 @@ function gameLoop() {
       const newX = bot.x + bot.vx * dt;
       const newY = bot.y + bot.vy * dt;
 
+      let moved = false;
       if (!checkWallCollision(newX, bot.y, GAME_CONFIG.PLAYER_RADIUS)) {
         bot.x = newX;
+        moved = true;
       } else {
         // Hit wall, change wander direction
         bot.wanderAngle = Math.random() * Math.PI * 2;
@@ -876,9 +997,16 @@ function gameLoop() {
 
       if (!checkWallCollision(bot.x, newY, GAME_CONFIG.PLAYER_RADIUS)) {
         bot.y = newY;
+        moved = true;
       } else {
         // Hit wall, change wander direction
         bot.wanderAngle = Math.random() * Math.PI * 2;
+      }
+
+      // Create footstep sounds when bot moves (every 300ms)
+      if (moved && (bot.vx !== 0 || bot.vy !== 0) && now - bot.lastFootstepSound > 300) {
+        createSoundEvent(bot.x, bot.y, 'footstep', bot.id);
+        bot.lastFootstepSound = now;
       }
 
       // Clamp to world bounds
@@ -925,16 +1053,25 @@ function gameLoop() {
       const newX = player.x + player.vx * dt;
       const newY = player.y + player.vy * dt;
 
+      let playerMoved = false;
       // Check X axis collision
       const xBlocked = checkWallCollision(newX, player.y, GAME_CONFIG.PLAYER_RADIUS);
       if (!xBlocked) {
         player.x = newX;
+        playerMoved = true;
       }
 
       // Check Y axis collision
       const yBlocked = checkWallCollision(player.x, newY, GAME_CONFIG.PLAYER_RADIUS);
       if (!yBlocked) {
         player.y = newY;
+        playerMoved = true;
+      }
+
+      // Create footstep sounds when player moves (every 300ms)
+      if (playerMoved && (player.vx !== 0 || player.vy !== 0) && now - player.lastFootstepSound > 300) {
+        createSoundEvent(player.x, player.y, 'footstep', player.id);
+        player.lastFootstepSound = now;
       }
 
       // Clamp to world bounds
