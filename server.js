@@ -1933,7 +1933,9 @@ function gameLoop() {
           bot.y = spawn.y;
           bot.health = GAME_CONFIG.PLAYER_MAX_HEALTH;
           bot.armor = GAME_CONFIG.PLAYER_START_ARMOR;
-          bot.ammo = WEAPONS[bot.weapon].mag;
+          bot.weapon = "pistol";
+          bot.ammo = WEAPONS.pistol.mag;
+          bot.maxAmmo = WEAPONS.pistol.mag;
           bot.invulnerable = now + GAME_CONFIG.SPAWN_INVULN_TIME;
           bot.respawnAt = null;
           bot.reloading = false;
@@ -2578,7 +2580,9 @@ function gameLoop() {
         player.y = spawn.y;
         player.health = GAME_CONFIG.PLAYER_MAX_HEALTH;
         player.armor = GAME_CONFIG.PLAYER_START_ARMOR;
-        player.ammo = WEAPONS[player.weapon].mag;
+        player.weapon = "pistol";
+        player.ammo = WEAPONS.pistol.mag;
+        player.maxAmmo = WEAPONS.pistol.mag;
         player.invulnerable = now + GAME_CONFIG.SPAWN_INVULN_TIME;
         player.respawnAt = null;
         player.reloading = false;
