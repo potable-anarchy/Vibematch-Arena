@@ -29,6 +29,7 @@ export class AssetLoader {
   }
 
   async loadAll() {
+    // Only load critical assets upfront - animations will lazy load
     const assetList = [
       // Effects
       { key: "blood_splat", src: "/assets/effects/blood-splat.png" },
@@ -51,9 +52,30 @@ export class AssetLoader {
       this.loadImage(asset.key, asset.src),
     );
 
-    // Load survivor animations with full frame counts from the art pack
+    await Promise.all(loadPromises);
+
+    // Load first frame of pistol idle animation for immediate display
+    await this.loadAnimationFrames(
+      "handgun_idle",
+      "/assets/survivor_sprites/handgun/idle/survivor-idle_handgun",
+      1, // Just load first frame
+    );
+
+    this.loaded = true;
+    console.log(
+      "Critical assets loaded! Animations will load in background...",
+    );
+
+    // Load remaining animations in background (non-blocking)
+    this.loadBackgroundAnimations();
+  }
+
+  async loadBackgroundAnimations() {
+    console.log("Loading animations in background...");
+
+    // Load all animation frames in background
     const animationPromises = [
-      // Handgun animations
+      // Complete handgun animations
       this.loadAnimationFrames(
         "handgun_idle",
         "/assets/survivor_sprites/handgun/idle/survivor-idle_handgun",
@@ -120,9 +142,8 @@ export class AssetLoader {
       ),
     ];
 
-    await Promise.all([...loadPromises, ...animationPromises]);
-    this.loaded = true;
-    console.log("All assets loaded!");
+    await Promise.all(animationPromises);
+    console.log("✅ All animations loaded!");
   }
 
   loadImage(key, src) {

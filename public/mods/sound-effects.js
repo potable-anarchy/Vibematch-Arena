@@ -80,28 +80,36 @@ class SoundManager {
 // Initialize sound manager
 const soundManager = new SoundManager();
 
-// Preload all sounds asynchronously
+// Preload sounds in background (non-blocking)
 (async () => {
-  // Realistic weapon sounds from public domain firearm library
-  await soundManager.preload("glock", "/assets/sounds/glock.mp3", 1, 0.6);
-  await soundManager.preload("deagle", "/assets/sounds/deagle.mp3", 1, 0.7);
-  await soundManager.preload("usp", "/assets/sounds/usp.mp3", 1, 0.5);
-  await soundManager.preload("mp5", "/assets/sounds/mp5.mp3", 1, 0.6);
-  await soundManager.preload("p90", "/assets/sounds/p90.mp3", 1, 0.6);
-  await soundManager.preload("ak47", "/assets/sounds/ak47.mp3", 1, 0.8);
-  await soundManager.preload("m4a1", "/assets/sounds/m4a1.mp3", 1, 0.7);
-  await soundManager.preload("awp", "/assets/sounds/awp.mp3", 1, 0.9);
-  await soundManager.preload("scout", "/assets/sounds/scout.mp3", 1, 0.7);
-  await soundManager.preload("shotgun", "/assets/sounds/shotgun.mp3", 1, 0.8);
+  console.log("Loading sounds in background...");
 
-  // Hit and death sounds
-  await soundManager.preload("hit", "/assets/sounds/Hit 1.mp3", 1, 0.5);
-  await soundManager.preload("death", "/assets/sounds/Game Over.mp3", 1, 0.5);
+  // Load most common sounds first for quick playback
+  const criticalSounds = [
+    soundManager.preload("glock", "/assets/sounds/glock.mp3", 1, 0.6),
+    soundManager.preload("hit", "/assets/sounds/Hit 1.mp3", 1, 0.5),
+    soundManager.preload("click", "/assets/sounds/click.mp3", 1, 0.4),
+  ];
 
-  // Out of ammo click sound
-  await soundManager.preload("click", "/assets/sounds/click.mp3", 1, 0.4);
+  await Promise.all(criticalSounds);
+  console.log("✅ Critical sounds loaded!");
 
-  console.log("✅ Realistic CS-style weapon sounds loaded!");
+  // Load remaining weapon sounds in background
+  const remainingSounds = [
+    soundManager.preload("deagle", "/assets/sounds/deagle.mp3", 1, 0.7),
+    soundManager.preload("usp", "/assets/sounds/usp.mp3", 1, 0.5),
+    soundManager.preload("mp5", "/assets/sounds/mp5.mp3", 1, 0.6),
+    soundManager.preload("p90", "/assets/sounds/p90.mp3", 1, 0.6),
+    soundManager.preload("ak47", "/assets/sounds/ak47.mp3", 1, 0.8),
+    soundManager.preload("m4a1", "/assets/sounds/m4a1.mp3", 1, 0.7),
+    soundManager.preload("awp", "/assets/sounds/awp.mp3", 1, 0.9),
+    soundManager.preload("scout", "/assets/sounds/scout.mp3", 1, 0.7),
+    soundManager.preload("shotgun", "/assets/sounds/shotgun.mp3", 1, 0.8),
+    soundManager.preload("death", "/assets/sounds/Game Over.mp3", 1, 0.5),
+  ];
+
+  await Promise.all(remainingSounds);
+  console.log("✅ All weapon sounds loaded!");
 })();
 
 // Map weapons to specific sounds

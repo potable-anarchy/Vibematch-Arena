@@ -130,7 +130,27 @@ app.get("/api/metrics/aggregated", (req, res) => {
 });
 
 // Middleware
-app.use(express.static(join(__dirname, "public")));
+// Serve static files with aggressive caching for assets
+app.use(
+  express.static(join(__dirname, "public"), {
+    maxAge: "1d", // Cache static assets for 1 day
+    etag: true, // Enable ETags for cache validation
+    lastModified: true,
+    setHeaders: (res, path) => {
+      // Cache images and sounds for longer (7 days)
+      if (path.match(/\.(png|jpg|jpeg|gif|svg|mp3|wav|ogg)$/)) {
+        res.setHeader("Cache-Control", "public, max-age=604800"); // 7 days
+      }
+      // Cache JS and CSS for 1 day but allow revalidation
+      else if (path.match(/\.(js|css)$/)) {
+        res.setHeader(
+          "Cache-Control",
+          "public, max-age=86400, must-revalidate",
+        ); // 1 day
+      }
+    },
+  }),
+);
 app.use(express.json()); // Parse JSON request bodies
 
 app.get("/", (req, res) => {
@@ -1782,7 +1802,9 @@ io.on("connection", (socket) => {
       const isSpectator = !player;
 
       if (isSpectator) {
-        console.log(`👻 Spectator ${socket.id} executing server mod: ${name || 'unnamed'}`);
+        console.log(
+          `👻 Spectator ${socket.id} executing server mod: ${name || "unnamed"}`,
+        );
       } else {
         console.log(`🔧 Executing server mod for ${player.name}`);
       }
@@ -1923,7 +1945,9 @@ io.on("connection", (socket) => {
       });
 
       if (isSpectator) {
-        console.log(`✅ Server mod executed successfully for spectator ${socket.id}`);
+        console.log(
+          `✅ Server mod executed successfully for spectator ${socket.id}`,
+        );
       } else {
         console.log(`✅ Server mod executed successfully for ${player.name}`);
       }

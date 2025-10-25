@@ -159,10 +159,47 @@ const ctx = canvas.getContext("2d");
   // This ensures canvas gets proper dimensions
   resizeCanvas();
 
-  // Load assets in background
+  // Get loading screen elements
+  const loadingScreen = document.getElementById("loadingScreen");
+  const loadingProgress = document.getElementById("loadingProgress");
+  const loadingText = document.getElementById("loadingText");
+
+  // Update loading progress
+  loadingProgress.style.width = "0%";
+
+  // Load critical assets first
   assets.loadAll().then(() => {
+    loadingProgress.style.width = "100%";
+    loadingText.textContent = "Ready!";
+
+    // Hide loading screen after brief delay
+    setTimeout(() => {
+      loadingScreen.style.opacity = "0";
+      setTimeout(() => {
+        loadingScreen.style.display = "none";
+      }, 500);
+    }, 300);
+
     console.log("✅ Assets loaded, ready to join game");
   });
+
+  // Simulate loading progress (assets load so fast we need to show something)
+  let progress = 0;
+  const progressInterval = setInterval(() => {
+    progress += 5;
+    if (progress <= 90) {
+      loadingProgress.style.width = `${progress}%`;
+      if (progress < 30) {
+        loadingText.textContent = "Loading assets...";
+      } else if (progress < 60) {
+        loadingText.textContent = "Loading animations...";
+      } else {
+        loadingText.textContent = "Almost ready...";
+      }
+    } else {
+      clearInterval(progressInterval);
+    }
+  }, 50);
 
   // Load mods
   setTimeout(autoLoadMods, 500);
@@ -572,7 +609,13 @@ socket.on("hit", (data) => {
       showKillMessage(data.shooterId, data.targetId, data.headshot);
       modSystem.callHook("onKill", data.shooterId, data.targetId);
     }
-    modSystem.callHook("onHit", data.shooterId, data.targetId, data.damage, data.headshot);
+    modSystem.callHook(
+      "onHit",
+      data.shooterId,
+      data.targetId,
+      data.damage,
+      data.headshot,
+    );
   }
 });
 
@@ -810,7 +853,9 @@ function createHitEffect(x, y, isHeadshot = false) {
   const particleCount = isHeadshot ? 20 : 12;
   for (let i = 0; i < particleCount; i++) {
     const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.3;
-    const speed = isHeadshot ? 200 + Math.random() * 200 : 150 + Math.random() * 150;
+    const speed = isHeadshot
+      ? 200 + Math.random() * 200
+      : 150 + Math.random() * 150;
     particles.push({
       x,
       y,
@@ -1220,7 +1265,7 @@ function drawPlayer(p) {
       const reloadDuration = weapon.reload * 1000; // Convert to milliseconds
       const now = Date.now();
       const timeRemaining = Math.max(0, p.reloadFinish - now);
-      const reloadProgress = 1 - (timeRemaining / reloadDuration);
+      const reloadProgress = 1 - timeRemaining / reloadDuration;
 
       ctx.fillStyle = "#ff9900"; // Orange color for reloading
       ctx.fillRect(barX, barY + 6, barWidth * reloadProgress, barHeight);
