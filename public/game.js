@@ -8,18 +8,18 @@ const assets = new AssetLoader();
 
 // Player colors for differentiation
 const PLAYER_COLORS = [
-  { name: 'blue', r: 100, g: 149, b: 237 },     // Cornflower blue
-  { name: 'red', r: 220, g: 20, b: 60 },        // Crimson
-  { name: 'green', r: 50, g: 205, b: 50 },      // Lime green
-  { name: 'yellow', r: 255, g: 215, b: 0 },     // Gold
-  { name: 'purple', r: 147, g: 112, b: 219 },   // Medium purple
-  { name: 'orange', r: 255, g: 140, b: 0 },     // Dark orange
-  { name: 'cyan', r: 0, g: 206, b: 209 },       // Dark turquoise
-  { name: 'pink', r: 255, g: 105, b: 180 },     // Hot pink
-  { name: 'lime', r: 154, g: 205, b: 50 },      // Yellow green
-  { name: 'magenta', r: 199, g: 21, b: 133 },   // Medium violet red
-  { name: 'teal', r: 0, g: 128, b: 128 },       // Teal
-  { name: 'brown', r: 139, g: 69, b: 19 },      // Saddle brown
+  { name: "blue", r: 100, g: 149, b: 237 }, // Cornflower blue
+  { name: "red", r: 220, g: 20, b: 60 }, // Crimson
+  { name: "green", r: 50, g: 205, b: 50 }, // Lime green
+  { name: "yellow", r: 255, g: 215, b: 0 }, // Gold
+  { name: "purple", r: 147, g: 112, b: 219 }, // Medium purple
+  { name: "orange", r: 255, g: 140, b: 0 }, // Dark orange
+  { name: "cyan", r: 0, g: 206, b: 209 }, // Dark turquoise
+  { name: "pink", r: 255, g: 105, b: 180 }, // Hot pink
+  { name: "lime", r: 154, g: 205, b: 50 }, // Yellow green
+  { name: "magenta", r: 199, g: 21, b: 133 }, // Medium violet red
+  { name: "teal", r: 0, g: 128, b: 128 }, // Teal
+  { name: "brown", r: 139, g: 69, b: 19 }, // Saddle brown
 ];
 
 // Map player IDs to colors
@@ -29,7 +29,10 @@ let nextColorIndex = 0;
 // Get or assign color for a player
 function getPlayerColor(playerId) {
   if (!playerColorMap.has(playerId)) {
-    playerColorMap.set(playerId, PLAYER_COLORS[nextColorIndex % PLAYER_COLORS.length]);
+    playerColorMap.set(
+      playerId,
+      PLAYER_COLORS[nextColorIndex % PLAYER_COLORS.length],
+    );
     nextColorIndex++;
   }
   return playerColorMap.get(playerId);
@@ -510,15 +513,16 @@ function getInterpolatedState() {
   const t = Math.min(1, timeSinceUpdate / INTERPOLATION_TIME); // 0 to 1
 
   // Interpolate player positions
-  const interpolatedPlayers = gameState.players.map(player => {
-    const lastPlayer = lastServerState.players.find(p => p.id === player.id);
+  const interpolatedPlayers = gameState.players.map((player) => {
+    const lastPlayer = lastServerState.players.find((p) => p.id === player.id);
     if (!lastPlayer) return player;
 
     return {
       ...player,
       x: lastPlayer.x + (player.x - lastPlayer.x) * t,
       y: lastPlayer.y + (player.y - lastPlayer.y) * t,
-      aimAngle: lastPlayer.aimAngle + (player.aimAngle - lastPlayer.aimAngle) * t,
+      aimAngle:
+        lastPlayer.aimAngle + (player.aimAngle - lastPlayer.aimAngle) * t,
     };
   });
 
@@ -935,9 +939,9 @@ function drawPlayer(p) {
   const playerColor = getPlayerColor(p.id);
 
   // Determine animation based on state
-  let weaponType = 'handgun'; // default
-  if (p.weapon === 'rifle' || p.weapon === 'smg') {
-    weaponType = 'rifle';
+  let weaponType = "handgun"; // default
+  if (p.weapon === "rifle" || p.weapon === "smg") {
+    weaponType = "rifle";
   }
 
   // Determine animation state
@@ -985,25 +989,31 @@ function drawPlayer(p) {
     }
 
     // Create colored version of sprite using canvas tinting
-    const tintCanvas = document.createElement('canvas');
+    const tintCanvas = document.createElement("canvas");
     tintCanvas.width = sprite.width;
     tintCanvas.height = sprite.height;
-    const tintCtx = tintCanvas.getContext('2d');
+    const tintCtx = tintCanvas.getContext("2d");
 
     // Draw original sprite
     tintCtx.drawImage(sprite, 0, 0);
 
     // Apply color tint
-    tintCtx.globalCompositeOperation = 'multiply';
+    tintCtx.globalCompositeOperation = "multiply";
     tintCtx.fillStyle = `rgb(${playerColor.r}, ${playerColor.g}, ${playerColor.b})`;
     tintCtx.fillRect(0, 0, sprite.width, sprite.height);
 
     // Restore original alpha
-    tintCtx.globalCompositeOperation = 'destination-in';
+    tintCtx.globalCompositeOperation = "destination-in";
     tintCtx.drawImage(sprite, 0, 0);
 
     // Draw tinted player sprite with scaling
-    ctx.drawImage(tintCanvas, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+    ctx.drawImage(
+      tintCanvas,
+      -scaledWidth / 2,
+      -scaledHeight / 2,
+      scaledWidth,
+      scaledHeight,
+    );
   } else {
     // Fallback to circle if sprite not loaded
     const radius = gameConfig?.PLAYER_RADIUS || 20;
@@ -1074,7 +1084,8 @@ function drawEffects(dt) {
       ctx.translate(screenX, screenY);
       ctx.rotate(effect.angle);
 
-      ctx.fillStyle = `rgba(255, 255, 100, ${alpha})`;
+      // Orange muzzle flash
+      ctx.fillStyle = `rgba(255, 140, 0, ${alpha})`;
       ctx.beginPath();
       // Draw at position 0,0 since we've already positioned at gun barrel end
       ctx.arc(0, 0, 8, 0, Math.PI * 2);
@@ -1136,24 +1147,22 @@ function drawProjectiles() {
     const screenX = worldToScreenX(projectile.x);
     const screenY = worldToScreenY(projectile.y);
 
-    // Draw projectile as a small glowing circle
+    // Draw projectile as a pixelated rectangle/bit
     ctx.save();
+    ctx.translate(screenX, screenY);
+    ctx.rotate(projectile.angle || 0);
 
     // Glow effect
     ctx.shadowColor = "#ffcc00";
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 6;
 
-    // Main projectile
+    // Main projectile - rectangular bit
     ctx.fillStyle = "#ffff66";
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, 3, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(-4, -1.5, 8, 3);
 
     // Inner bright core
     ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(screenX, screenY, 1.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(-3, -1, 6, 2);
 
     ctx.shadowBlur = 0;
     ctx.restore();
