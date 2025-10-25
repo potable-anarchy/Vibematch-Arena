@@ -3,60 +3,94 @@
  * Collects and tracks server performance metrics in real-time
  */
 
-import os from 'os';
+import os from "os";
 
 class PerformanceMonitor {
   constructor() {
+    // SLO Definitions (Service Level Objectives)
+    this.SLOs = {
+      gameLoop: {
+        targetTickTime: 16.67, // Target: 60 FPS = 16.67ms per tick
+        p95Threshold: 16.67, // 95% of ticks should be under this
+        p99Threshold: 20.0, // 99% of ticks should be under this
+      },
+      api: {
+        targetResponseTime: 100, // Target: < 100ms
+        p95Threshold: 100, // 95% of requests under 100ms
+        p99Threshold: 200, // 99% of requests under 200ms
+        errorRateThreshold: 0.01, // Max 1% error rate
+      },
+      availability: {
+        targetUptime: 0.999, // 99.9% uptime target
+      },
+    };
+
     // Current metrics
     this.metrics = {
       // Game Loop Metrics
       gameLoop: {
-        tickTime: 0,                    // Current tick execution time (ms)
-        avgTickTime: 0,                 // Average tick time over last second
-        maxTickTime: 0,                 // Maximum tick time in last second
-        ticksPerSecond: 0,              // Actual tick rate
-        tickTimeHistory: [],            // Last 60 tick times
-        slowTicks: 0,                   // Ticks that exceeded 16.67ms
+        tickTime: 0, // Current tick execution time (ms)
+        avgTickTime: 0, // Average tick time over last second
+        maxTickTime: 0, // Maximum tick time in last second
+        ticksPerSecond: 0, // Actual tick rate
+        tickTimeHistory: [], // Last 60 tick times
+        slowTicks: 0, // Ticks that exceeded 16.67ms
+        p50: 0, // 50th percentile (median)
+        p95: 0, // 95th percentile
+        p99: 0, // 99th percentile
       },
 
       // Network Metrics
       network: {
-        activeConnections: 0,           // Current socket connections
-        messagesPerSecond: 0,           // Messages sent per second
-        bytesPerSecond: 0,              // Bytes sent per second
-        avgLatency: 0,                  // Average client latency (ms)
-        messageCount: 0,                // Total messages sent
-        bytesSent: 0,                   // Total bytes sent
+        activeConnections: 0, // Current socket connections
+        messagesPerSecond: 0, // Messages sent per second
+        bytesPerSecond: 0, // Bytes sent per second
+        avgLatency: 0, // Average client latency (ms)
+        messageCount: 0, // Total messages sent
+        bytesSent: 0, // Total bytes sent
       },
 
       // Game State Metrics
       gameState: {
-        playerCount: 0,                 // Human players
-        botCount: 0,                    // Bot players
-        projectileCount: 0,             // Active projectiles
-        pickupCount: 0,                 // Active pickups
-        activeGames: 0,                 // Active game sessions
+        playerCount: 0, // Human players
+        botCount: 0, // Bot players
+        projectileCount: 0, // Active projectiles
+        pickupCount: 0, // Active pickups
+        activeGames: 0, // Active game sessions
       },
 
       // System Metrics
       system: {
-        memoryUsageMB: 0,               // Current memory usage
-        heapUsedMB: 0,                  // Heap used
-        heapTotalMB: 0,                 // Total heap
-        cpuUsage: 0,                    // CPU usage percentage
-        uptime: 0,                      // Server uptime (seconds)
-        platform: os.platform(),        // OS platform
-        nodeVersion: process.version,   // Node.js version
+        memoryUsageMB: 0, // Current memory usage
+        heapUsedMB: 0, // Heap used
+        heapTotalMB: 0, // Total heap
+        cpuUsage: 0, // CPU usage percentage
+        uptime: 0, // Server uptime (seconds)
+        platform: os.platform(), // OS platform
+        nodeVersion: process.version, // Node.js version
       },
 
       // API Metrics
       api: {
-        requestsPerSecond: 0,           // HTTP requests per second
-        avgResponseTime: 0,             // Average response time (ms)
-        errorRate: 0,                   // Errors per second
-        requestCount: 0,                // Total requests
-        errorCount: 0,                  // Total errors
-        endpointStats: {},              // Per-endpoint statistics
+        requestsPerSecond: 0, // HTTP requests per second
+        avgResponseTime: 0, // Average response time (ms)
+        errorRate: 0, // Errors per second
+        requestCount: 0, // Total requests
+        errorCount: 0, // Total errors
+        endpointStats: {}, // Per-endpoint statistics
+        responseTimeHistory: [], // Last 100 response times
+        p50: 0, // 50th percentile
+        p95: 0, // 95th percentile
+        p99: 0, // 99th percentile
+      },
+
+      // SLI/SLO Status (Service Level Indicators)
+      sli: {
+        gameLoopCompliance: 0, // % of ticks meeting SLO
+        apiLatencyCompliance: 0, // % of API requests meeting SLO
+        errorRateCompliance: true, // Is error rate within SLO?
+        overallHealth: 100, // Overall health score (0-100)
+        breaches: [], // Recent SLO breaches
       },
 
       // Timestamps
@@ -108,8 +142,12 @@ class PerformanceMonitor {
   updateSystemMetrics() {
     const memUsage = process.memoryUsage();
     this.metrics.system.memoryUsageMB = Math.round(memUsage.rss / 1024 / 1024);
-    this.metrics.system.heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-    this.metrics.system.heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+    this.metrics.system.heapUsedMB = Math.round(
+      memUsage.heapUsed / 1024 / 1024,
+    );
+    this.metrics.system.heapTotalMB = Math.round(
+      memUsage.heapTotal / 1024 / 1024,
+    );
     this.metrics.system.uptime = Math.round(process.uptime());
 
     // CPU usage calculation
@@ -117,7 +155,7 @@ class PerformanceMonitor {
     let totalIdle = 0;
     let totalTick = 0;
 
-    cpus.forEach(cpu => {
+    cpus.forEach((cpu) => {
       for (let type in cpu.times) {
         totalTick += cpu.times[type];
       }
@@ -126,7 +164,7 @@ class PerformanceMonitor {
 
     const idle = totalIdle / cpus.length;
     const total = totalTick / cpus.length;
-    const usage = 100 - ~~(100 * idle / total);
+    const usage = 100 - ~~((100 * idle) / total);
     this.metrics.system.cpuUsage = usage;
   }
 
@@ -138,15 +176,23 @@ class PerformanceMonitor {
     const deltaSeconds = (now - this.metrics.lastUpdate) / 1000;
 
     // Network rates
-    const messageDelta = this.metrics.network.messageCount - this.counters.lastMessageCount;
-    const bytesDelta = this.metrics.network.bytesSent - this.counters.lastBytesSent;
-    this.metrics.network.messagesPerSecond = Math.round(messageDelta / deltaSeconds);
+    const messageDelta =
+      this.metrics.network.messageCount - this.counters.lastMessageCount;
+    const bytesDelta =
+      this.metrics.network.bytesSent - this.counters.lastBytesSent;
+    this.metrics.network.messagesPerSecond = Math.round(
+      messageDelta / deltaSeconds,
+    );
     this.metrics.network.bytesPerSecond = Math.round(bytesDelta / deltaSeconds);
 
     // API rates
-    const requestDelta = this.metrics.api.requestCount - this.counters.lastRequestCount;
-    const errorDelta = this.metrics.api.errorCount - this.counters.lastErrorCount;
-    this.metrics.api.requestsPerSecond = Math.round(requestDelta / deltaSeconds);
+    const requestDelta =
+      this.metrics.api.requestCount - this.counters.lastRequestCount;
+    const errorDelta =
+      this.metrics.api.errorCount - this.counters.lastErrorCount;
+    this.metrics.api.requestsPerSecond = Math.round(
+      requestDelta / deltaSeconds,
+    );
     this.metrics.api.errorRate = Math.round(errorDelta / deltaSeconds);
 
     // Game loop rates
@@ -172,7 +218,9 @@ class PerformanceMonitor {
     this.history.timestamps.push(Date.now());
     this.history.tickTimes.push(this.metrics.gameLoop.avgTickTime);
     this.history.memoryUsage.push(this.metrics.system.memoryUsageMB);
-    this.history.playerCounts.push(this.metrics.gameState.playerCount + this.metrics.gameState.botCount);
+    this.history.playerCounts.push(
+      this.metrics.gameState.playerCount + this.metrics.gameState.botCount,
+    );
     this.history.cpuUsage.push(this.metrics.system.cpuUsage);
     this.history.networkThroughput.push(this.metrics.network.bytesPerSecond);
 
@@ -185,6 +233,118 @@ class PerformanceMonitor {
       this.history.cpuUsage.shift();
       this.history.networkThroughput.shift();
     }
+  }
+
+  /**
+   * Calculate percentile from array of values
+   * @param {Array} values - Array of values
+   * @param {number} percentile - Percentile to calculate (0-1)
+   * @returns {number} Value at percentile
+   */
+  calculatePercentile(values, percentile) {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = Math.ceil(sorted.length * percentile) - 1;
+    return sorted[Math.max(0, index)];
+  }
+
+  /**
+   * Update SLI compliance metrics
+   */
+  updateSLICompliance() {
+    // Game loop SLI: % of ticks within target time
+    const tickHistory = this.metrics.gameLoop.tickTimeHistory;
+    if (tickHistory.length > 0) {
+      const compliantTicks = tickHistory.filter(
+        (t) => t <= this.SLOs.gameLoop.p95Threshold,
+      ).length;
+      this.metrics.sli.gameLoopCompliance = +(
+        (compliantTicks / tickHistory.length) *
+        100
+      ).toFixed(2);
+
+      // Check for breach
+      if (this.metrics.sli.gameLoopCompliance < 95) {
+        this.recordSLOBreach(
+          "gameLoop",
+          this.metrics.sli.gameLoopCompliance,
+          95,
+        );
+      }
+    }
+
+    // API latency SLI: % of requests within target time
+    const apiHistory = this.metrics.api.responseTimeHistory;
+    if (apiHistory.length > 0) {
+      const compliantRequests = apiHistory.filter(
+        (t) => t <= this.SLOs.api.p95Threshold,
+      ).length;
+      this.metrics.sli.apiLatencyCompliance = +(
+        (compliantRequests / apiHistory.length) *
+        100
+      ).toFixed(2);
+
+      // Check for breach
+      if (this.metrics.sli.apiLatencyCompliance < 95) {
+        this.recordSLOBreach(
+          "apiLatency",
+          this.metrics.sli.apiLatencyCompliance,
+          95,
+        );
+      }
+    }
+
+    // Error rate SLI: Is error rate below threshold?
+    const errorRate =
+      this.metrics.api.requestCount > 0
+        ? this.metrics.api.errorCount / this.metrics.api.requestCount
+        : 0;
+    this.metrics.sli.errorRateCompliance =
+      errorRate <= this.SLOs.api.errorRateThreshold;
+
+    if (!this.metrics.sli.errorRateCompliance) {
+      this.recordSLOBreach(
+        "errorRate",
+        errorRate * 100,
+        this.SLOs.api.errorRateThreshold * 100,
+      );
+    }
+
+    // Calculate overall health score (weighted average)
+    const weights = {
+      gameLoop: 0.4, // 40% weight on game performance
+      apiLatency: 0.3, // 30% weight on API performance
+      errorRate: 0.3, // 30% weight on reliability
+    };
+
+    this.metrics.sli.overallHealth = +(
+      this.metrics.sli.gameLoopCompliance * weights.gameLoop +
+      this.metrics.sli.apiLatencyCompliance * weights.apiLatency +
+      (this.metrics.sli.errorRateCompliance ? 100 : 0) * weights.errorRate
+    ).toFixed(2);
+  }
+
+  /**
+   * Record an SLO breach
+   */
+  recordSLOBreach(type, actual, target) {
+    const breach = {
+      type,
+      actual,
+      target,
+      timestamp: Date.now(),
+    };
+
+    this.metrics.sli.breaches.push(breach);
+
+    // Keep only last 10 breaches
+    if (this.metrics.sli.breaches.length > 10) {
+      this.metrics.sli.breaches.shift();
+    }
+
+    console.warn(
+      `⚠️  SLO BREACH: ${type} - Actual: ${actual.toFixed(2)}%, Target: ${target}%`,
+    );
   }
 
   /**
@@ -202,16 +362,40 @@ class PerformanceMonitor {
     }
 
     // Calculate average
-    const sum = this.metrics.gameLoop.tickTimeHistory.reduce((a, b) => a + b, 0);
-    this.metrics.gameLoop.avgTickTime = +(sum / this.metrics.gameLoop.tickTimeHistory.length).toFixed(2);
+    const sum = this.metrics.gameLoop.tickTimeHistory.reduce(
+      (a, b) => a + b,
+      0,
+    );
+    this.metrics.gameLoop.avgTickTime = +(
+      sum / this.metrics.gameLoop.tickTimeHistory.length
+    ).toFixed(2);
 
     // Track max tick time
-    this.metrics.gameLoop.maxTickTime = Math.max(...this.metrics.gameLoop.tickTimeHistory);
+    this.metrics.gameLoop.maxTickTime = Math.max(
+      ...this.metrics.gameLoop.tickTimeHistory,
+    );
+
+    // Calculate percentiles
+    this.metrics.gameLoop.p50 = +this.calculatePercentile(
+      this.metrics.gameLoop.tickTimeHistory,
+      0.5,
+    ).toFixed(2);
+    this.metrics.gameLoop.p95 = +this.calculatePercentile(
+      this.metrics.gameLoop.tickTimeHistory,
+      0.95,
+    ).toFixed(2);
+    this.metrics.gameLoop.p99 = +this.calculatePercentile(
+      this.metrics.gameLoop.tickTimeHistory,
+      0.99,
+    ).toFixed(2);
 
     // Count slow ticks (>16.67ms = below 60fps)
     if (tickTime > 16.67) {
       this.metrics.gameLoop.slowTicks++;
     }
+
+    // Update SLI compliance
+    this.updateSLICompliance();
   }
 
   /**
@@ -278,6 +462,28 @@ class PerformanceMonitor {
 
     const duration = Date.now() - request.startTime;
 
+    // Track response time history
+    this.metrics.api.responseTimeHistory.push(duration);
+
+    // Keep only last 100 response times
+    if (this.metrics.api.responseTimeHistory.length > 100) {
+      this.metrics.api.responseTimeHistory.shift();
+    }
+
+    // Calculate API percentiles
+    this.metrics.api.p50 = +this.calculatePercentile(
+      this.metrics.api.responseTimeHistory,
+      0.5,
+    ).toFixed(2);
+    this.metrics.api.p95 = +this.calculatePercentile(
+      this.metrics.api.responseTimeHistory,
+      0.95,
+    ).toFixed(2);
+    this.metrics.api.p99 = +this.calculatePercentile(
+      this.metrics.api.responseTimeHistory,
+      0.99,
+    ).toFixed(2);
+
     // Update endpoint stats
     const stats = this.metrics.api.endpointStats[request.endpoint];
     if (stats) {
@@ -291,12 +497,17 @@ class PerformanceMonitor {
 
     // Update global average
     const allTimes = Object.values(this.metrics.api.endpointStats)
-      .map(s => s.avgTime)
-      .filter(t => t > 0);
+      .map((s) => s.avgTime)
+      .filter((t) => t > 0);
 
     if (allTimes.length > 0) {
-      this.metrics.api.avgResponseTime = +(allTimes.reduce((a, b) => a + b, 0) / allTimes.length).toFixed(2);
+      this.metrics.api.avgResponseTime = +(
+        allTimes.reduce((a, b) => a + b, 0) / allTimes.length
+      ).toFixed(2);
     }
+
+    // Update SLI compliance after each API request
+    this.updateSLICompliance();
 
     this.activeRequests.delete(requestId);
   }
@@ -321,7 +532,11 @@ class PerformanceMonitor {
       gameLoop: {
         avgTickTime: this.metrics.gameLoop.avgTickTime,
         ticksPerSecond: this.metrics.gameLoop.ticksPerSecond,
-        slowTickPercentage: +(this.metrics.gameLoop.slowTicks / this.metrics.gameLoop.tickTimeHistory.length * 100).toFixed(1),
+        slowTickPercentage: +(
+          (this.metrics.gameLoop.slowTicks /
+            this.metrics.gameLoop.tickTimeHistory.length) *
+          100
+        ).toFixed(1),
       },
       system: {
         memoryUsageMB: this.metrics.system.memoryUsageMB,
@@ -329,7 +544,8 @@ class PerformanceMonitor {
         uptime: this.metrics.system.uptime,
       },
       game: {
-        totalPlayers: this.metrics.gameState.playerCount + this.metrics.gameState.botCount,
+        totalPlayers:
+          this.metrics.gameState.playerCount + this.metrics.gameState.botCount,
         humanPlayers: this.metrics.gameState.playerCount,
         projectiles: this.metrics.gameState.projectileCount,
       },

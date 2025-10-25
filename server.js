@@ -1627,7 +1627,8 @@ function gameLoop() {
 
         if (dist < GAME_CONFIG.PLAYER_RADIUS + PROJECTILE_RADIUS) {
           // Hit player - check if headshot
-          const headshotRadius = GAME_CONFIG.PLAYER_RADIUS * GAME_CONFIG.HEADSHOT_RADIUS_RATIO;
+          const headshotRadius =
+            GAME_CONFIG.PLAYER_RADIUS * GAME_CONFIG.HEADSHOT_RADIUS_RATIO;
           const isHeadshot = dist <= headshotRadius;
           const finalDamage = isHeadshot
             ? proj.damage * GAME_CONFIG.HEADSHOT_DAMAGE_MULTIPLIER
@@ -1661,7 +1662,8 @@ function gameLoop() {
 
         if (dist < GAME_CONFIG.PLAYER_RADIUS + PROJECTILE_RADIUS) {
           // Hit bot - check if headshot
-          const headshotRadius = GAME_CONFIG.PLAYER_RADIUS * GAME_CONFIG.HEADSHOT_RADIUS_RATIO;
+          const headshotRadius =
+            GAME_CONFIG.PLAYER_RADIUS * GAME_CONFIG.HEADSHOT_RADIUS_RATIO;
           const isHeadshot = dist <= headshotRadius;
           const finalDamage = isHeadshot
             ? proj.damage * GAME_CONFIG.HEADSHOT_DAMAGE_MULTIPLIER
@@ -2407,7 +2409,7 @@ function gameLoop() {
       };
 
       const stateString = JSON.stringify(state);
-      performanceMonitor.recordMessage(Buffer.byteLength(stateString, 'utf8'));
+      performanceMonitor.recordMessage(Buffer.byteLength(stateString, "utf8"));
       io.emit("state", state);
     }
 
@@ -2416,7 +2418,7 @@ function gameLoop() {
       players: gameState.players.size,
       bots: gameState.bots.size,
       projectiles: gameState.projectiles.length,
-      pickups: gameState.pickups.filter(p => p.active).length,
+      pickups: gameState.pickups.filter((p) => p.active).length,
     });
     performanceMonitor.updateConnectionCount(io.engine.clientsCount);
 
