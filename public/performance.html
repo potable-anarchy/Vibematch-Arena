@@ -924,6 +924,7 @@
             let customStart = null;
             let customEnd = null;
             let isLiveMode = true;
+            let historicalRefreshInterval = null;
 
             // Convert range string to milliseconds
             function rangeToMs(range) {
@@ -1146,6 +1147,13 @@
                     // Handle live mode
                     if (range === "live") {
                         isLiveMode = true;
+
+                        // Stop historical refresh interval
+                        if (historicalRefreshInterval) {
+                            clearInterval(historicalRefreshInterval);
+                            historicalRefreshInterval = null;
+                        }
+
                         document.getElementById(
                             "customRangePicker",
                         ).style.display = "none";
@@ -1159,6 +1167,17 @@
 
                     // Not live mode - viewing historical data
                     isLiveMode = false;
+
+                    // Start periodic refresh for historical data (every 10 seconds)
+                    if (historicalRefreshInterval) {
+                        clearInterval(historicalRefreshInterval);
+                    }
+                    historicalRefreshInterval = setInterval(() => {
+                        console.log(
+                            `Refreshing historical data for ${currentTimeRange}`,
+                        );
+                        updateHistoricalData();
+                    }, 10000); // Refresh every 10 seconds
 
                     // Show/hide custom range picker
                     const customPicker =
