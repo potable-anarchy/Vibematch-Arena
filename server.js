@@ -158,7 +158,7 @@ app.post("/api/generate-mod", async (req, res) => {
 
     // Call Gemini API
     const geminiEndpoint =
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
     const systemPrompt = buildSystemPrompt();
     const fullPrompt = `${systemPrompt}\n\nUser Request:\n${prompt}`;
 

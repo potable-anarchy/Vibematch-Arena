@@ -1158,15 +1158,14 @@ function drawPlayer(p) {
     ctx.fillRect(barX, barY - 6, barWidth * (p.armor / 100), barHeight);
   }
 
-  // Ammo bar (below health bar)
-  if (weapons && weapons[p.weapon]) {
-    const ammoPercent = p.ammo / weapons[p.weapon].mag;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(barX, barY + 6, barWidth, barHeight);
-
-    ctx.fillStyle = "#ffd700"; // Gold color
-    ctx.fillRect(barX, barY + 6, barWidth * ammoPercent, barHeight);
-  }
+  // Ammo bar removed - handled by mod system
+  // if (weapons && weapons[p.weapon]) {
+  //   const ammoPercent = p.ammo / weapons[p.weapon].mag;
+  //   ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+  //   ctx.fillRect(barX, barY + 6, barWidth, barHeight);
+  //   ctx.fillStyle = "#ffd700"; // Gold color
+  //   ctx.fillRect(barX, barY + 6, barWidth * ammoPercent, barHeight);
+  // }
 }
 
 function drawEffects(dt) {
