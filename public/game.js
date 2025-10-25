@@ -1154,14 +1154,28 @@ function drawPlayer(p) {
     ctx.fillRect(barX, barY - 6, barWidth * (p.armor / 100), barHeight);
   }
 
-  // Ammo bar removed - handled by mod system
-  // if (weapons && weapons[p.weapon]) {
-  //   const ammoPercent = p.ammo / weapons[p.weapon].mag;
-  //   ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-  //   ctx.fillRect(barX, barY + 6, barWidth, barHeight);
-  //   ctx.fillStyle = "#ffd700"; // Gold color
-  //   ctx.fillRect(barX, barY + 6, barWidth * ammoPercent, barHeight);
-  // }
+  // Ammo bar - shows magazine percentage or reload progress
+  if (weapons && weapons[p.weapon]) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillRect(barX, barY + 6, barWidth, barHeight);
+
+    if (p.reloading && p.reloadFinish) {
+      // Show reload progress as a filling bar
+      const weapon = weapons[p.weapon];
+      const reloadDuration = weapon.reload * 1000; // Convert to milliseconds
+      const now = Date.now();
+      const timeRemaining = Math.max(0, p.reloadFinish - now);
+      const reloadProgress = 1 - (timeRemaining / reloadDuration);
+
+      ctx.fillStyle = "#ff9900"; // Orange color for reloading
+      ctx.fillRect(barX, barY + 6, barWidth * reloadProgress, barHeight);
+    } else {
+      // Show ammo percentage
+      const ammoPercent = p.ammo / weapons[p.weapon].mag;
+      ctx.fillStyle = "#ffd700"; // Gold color
+      ctx.fillRect(barX, barY + 6, barWidth * ammoPercent, barHeight);
+    }
+  }
 }
 
 function drawEffects(dt) {

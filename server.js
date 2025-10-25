@@ -2445,6 +2445,7 @@ function gameLoop() {
           kills: p.kills,
           deaths: p.deaths,
           reloading: p.reloading,
+          reloadFinish: p.reloadFinish,
           invulnerable: p.invulnerable > now,
         })),
         pickups: gameState.pickups.map((p) => ({
