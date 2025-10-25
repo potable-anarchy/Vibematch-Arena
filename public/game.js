@@ -704,9 +704,10 @@ function drawPlayer(p) {
     }
   } else {
     // Fallback to circle if sprite not loaded
+    const radius = gameConfig?.PLAYER_RADIUS || 20;
     ctx.fillStyle = isLocalPlayer ? "#66ccff" : "#ff9966";
     ctx.beginPath();
-    ctx.arc(0, 0, gameConfig.PLAYER_RADIUS, 0, Math.PI * 2);
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.fill();
 
     // Weapon direction line
@@ -721,17 +722,18 @@ function drawPlayer(p) {
   ctx.restore();
 
   // Name
+  const playerRadius = gameConfig?.PLAYER_RADIUS || 20;
   ctx.fillStyle = "#fff";
   ctx.font = "12px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
-  ctx.fillText(p.name, screenX, screenY - gameConfig.PLAYER_RADIUS - 5);
+  ctx.fillText(p.name, screenX, screenY - playerRadius - 5);
 
   // Health bar
   const barWidth = 40;
   const barHeight = 4;
   const barX = screenX - barWidth / 2;
-  const barY = screenY + gameConfig.PLAYER_RADIUS + 8;
+  const barY = screenY + playerRadius + 8;
 
   ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
   ctx.fillRect(barX, barY, barWidth, barHeight);
