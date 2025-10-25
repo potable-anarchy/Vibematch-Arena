@@ -1190,7 +1190,7 @@
 
             // Filter out data points older than the current time window
             function filterOldDataPoints() {
-                if (isLiveMode || isCustomRange) return; // Don't filter in live or custom mode
+                if (!isLiveMode || isCustomRange) return; // Only filter in live mode, not in custom range
 
                 const now = Date.now();
                 const windowMs = rangeToMs(currentTimeRange);
