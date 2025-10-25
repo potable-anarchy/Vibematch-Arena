@@ -88,10 +88,20 @@ app.get("/api/metrics/history", (req, res) => {
   const requestId = `${Date.now()}-${Math.random()}`;
   performanceMonitor.startRequest(requestId, "/api/metrics/history");
 
-  const hours = parseInt(req.query.hours) || 48;
-  const startTime = Date.now() - hours * 60 * 60 * 1000;
+  let startTime, endTime;
 
-  const history = performanceMonitor.getHistoricalMetrics(startTime);
+  if (req.query.start && req.query.end) {
+    // Custom range
+    startTime = parseInt(req.query.start);
+    endTime = parseInt(req.query.end);
+  } else {
+    // Hours from now
+    const hours = parseInt(req.query.hours) || 48;
+    startTime = Date.now() - hours * 60 * 60 * 1000;
+    endTime = Date.now();
+  }
+
+  const history = performanceMonitor.getHistoricalMetrics(startTime, endTime);
   res.json({ data: history, count: history.length });
 
   performanceMonitor.endRequest(requestId);
