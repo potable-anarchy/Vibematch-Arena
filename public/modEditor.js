@@ -203,13 +203,21 @@ export class ModEditor {
       // Remove the "generating" entry
       this.modHUD.removeMod(tempModId);
 
-      // Check for backfire
+      // Check for backfire and play alarm
       if (result.backfire) {
-        this.showBackfireWarning(result, prompt);
-        return;
+        // Play alarm sound
+        try {
+          const audio = new Audio(
+            "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg",
+          );
+          audio.volume = 0.3;
+          audio.play().catch(() => {});
+        } catch (e) {}
+
+        console.log("🎲 BACKFIRE! Activating anyway...");
       }
 
-      // Auto-activate based on type
+      // Auto-activate based on type (even if backfire)
       this.activateMod(result, prompt);
     } catch (error) {
       console.error("Generation error:", error);
