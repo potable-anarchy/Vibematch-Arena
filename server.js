@@ -156,9 +156,9 @@ app.post("/api/generate-mod", async (req, res) => {
       });
     }
 
-    // Call Gemini API
+    // Call Gemini API - using v1 (stable) instead of v1beta
     const geminiEndpoint =
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent";
     const systemPrompt = buildSystemPrompt();
     const fullPrompt = `${systemPrompt}\n\nUser Request:\n${prompt}`;
 
@@ -189,6 +189,18 @@ app.post("/api/generate-mod", async (req, res) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Gemini API error:", response.status, errorText);
+      console.error(
+        "Endpoint used:",
+        `${geminiEndpoint}?key=${apiKey.substring(0, 8)}...`,
+      );
+
+      // More specific error messages
+      if (response.status === 404) {
+        return res.status(404).json({
+          error: `Gemini API model not found. Check if gemini-1.5-flash is available in your region or API key permissions.`,
+        });
+      }
+
       return res.status(response.status).json({
         error: `Gemini API error: ${response.statusText}`,
       });
