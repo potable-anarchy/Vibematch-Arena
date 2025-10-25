@@ -706,18 +706,6 @@ function drawPlayer(p) {
 
     // Draw player sprite
     ctx.drawImage(sprite, -sprite.width / 2, -sprite.height / 2);
-
-    // Draw colored outline for player identification
-    if (isLocalPlayer) {
-      ctx.strokeStyle = "#66ccff";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        -sprite.width / 2,
-        -sprite.height / 2,
-        sprite.width,
-        sprite.height,
-      );
-    }
   } else {
     // Fallback to circle if sprite not loaded
     const radius = gameConfig?.PLAYER_RADIUS || 20;
