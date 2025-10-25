@@ -407,7 +407,7 @@ const WEAPONS = {
   shotgun: {
     damage: 8,
     pellets: 10,
-    rof: 0.9,
+    rof: 1.8,
     mag: 6,
     reload: 2.5,
     range: 550,
