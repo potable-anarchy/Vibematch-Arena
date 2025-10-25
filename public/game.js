@@ -526,8 +526,13 @@ function getInterpolatedState() {
 }
 
 socket.on("shoot", (data) => {
-  createMuzzleFlash(data.x, data.y, data.angle);
-  createBulletTracer(data.x, data.y, data.angle, weapons[data.weapon].range);
+  // Calculate gun barrel end position (gun extends about 25-30 pixels from player center)
+  const gunBarrelLength = 30;
+  const gunEndX = data.x + Math.cos(data.angle) * gunBarrelLength;
+  const gunEndY = data.y + Math.sin(data.angle) * gunBarrelLength;
+
+  createMuzzleFlash(gunEndX, gunEndY, data.angle);
+  createBulletTracer(gunEndX, gunEndY, data.angle, weapons[data.weapon].range);
   modSystem.callHook("onShoot", data);
 });
 
@@ -1039,7 +1044,8 @@ function drawEffects(dt) {
 
       ctx.fillStyle = `rgba(255, 255, 100, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(15, 0, 8, 0, Math.PI * 2);
+      // Draw at position 0,0 since we've already positioned at gun barrel end
+      ctx.arc(0, 0, 8, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
