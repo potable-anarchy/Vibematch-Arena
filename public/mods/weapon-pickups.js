@@ -55,21 +55,96 @@ registerHook("onRender", (ctx, camera, dt) => {
       pickup.collectedAt = null;
     }
 
-    // Check collection
-    if (pickup.active && myPlayer && myPlayer.health > 0) {
-      const dx = myPlayer.x - pickup.x;
-      const dy = myPlayer.y - pickup.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+    const pos = worldToScreen(pickup.x, pickup.y);
 
-      if (dist < COLLECT_DISTANCE) {
-        // Would collect weapon here (need server-side implementation)
-        // For now just show proximity indicator
+    // Draw respawn timer if weapon is inactive
+    if (!pickup.active && pickup.collectedAt) {
+      // Only draw if visible
+      if (
+        pos.x + PICKUP_RADIUS > 0 &&
+        pos.x - PICKUP_RADIUS < canvas.width &&
+        pos.y + PICKUP_RADIUS > 0 &&
+        pos.y - PICKUP_RADIUS < canvas.height
+      ) {
+        const timeElapsed = now - pickup.collectedAt;
+        const respawnProgress = Math.min(timeElapsed / pickup.respawn, 1);
+
+        // Weapon colors
+        const colors = {
+          pistol: "#cccccc",
+          smg: "#66ccff",
+          shotgun: "#ff6633",
+          rifle: "#ffaa00",
+        };
+        const color = colors[pickup.weapon] || "#ffffff";
+
+        // Semi-transparent background circle
+        ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 35, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw pie chart timer
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.rotate(-Math.PI / 2); // Start from top
+
+        // Draw filled portion (time remaining)
+        ctx.fillStyle = `${color}40`; // Semi-transparent
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, 30, 0, Math.PI * 2 * respawnProgress);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+
+        // Draw outline circle
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 30, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+
+        // Get weapon sprite for center icon
+        const assetKey = `weapon_${pickup.weapon}`;
+        const weaponImg = game.getAssets().get(assetKey);
+
+        if (weaponImg) {
+          // Draw semi-transparent weapon sprite in center
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          const weaponScales = {
+            pistol: 0.2,
+            smg: 0.11,
+            shotgun: 0.09,
+            rifle: 0.11,
+          };
+          const scale = weaponScales[pickup.weapon] || 0.2;
+          const spriteWidth = weaponImg.width * scale;
+          const spriteHeight = weaponImg.height * scale;
+          ctx.drawImage(
+            weaponImg,
+            pos.x - spriteWidth / 2,
+            pos.y - spriteHeight / 2,
+            spriteWidth,
+            spriteHeight,
+          );
+          ctx.restore();
+        }
+
+        // Display time remaining in seconds
+        const timeRemaining = Math.ceil((pickup.respawn - timeElapsed) / 1000);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.font = "bold 14px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${timeRemaining}`, pos.x, pos.y + 45);
       }
+      return;
     }
 
     if (!pickup.active) return;
-
-    const pos = worldToScreen(pickup.x, pickup.y);
 
     // Only draw if visible
     if (
@@ -171,23 +246,26 @@ registerHook("onRender", (ctx, camera, dt) => {
         ctx.fillText(pickup.weapon.toUpperCase(), pos.x, pos.y + size + 15);
       }
 
-      // Check distance to player
-      if (myPlayer && myPlayer.health > 0) {
-        const dx = myPlayer.x - pickup.x;
-        const dy = myPlayer.y - pickup.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < COLLECT_DISTANCE) {
-          // Collection prompt
-          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-          ctx.font = "bold 10px monospace";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("Press E", pos.x, pos.y + 52);
-        }
-      }
+      // Removed "Press E" prompt - weapons auto-pickup on collision
     }
   });
+});
+
+// Listen for pickup events to sync weapon state
+registerHook("onPickup", (playerId, pickup) => {
+  // Check if this is a weapon pickup
+  if (pickup.type && pickup.type.startsWith("weapon_")) {
+    // Find matching weapon in our local array
+    const weaponType = pickup.type.replace("weapon_", "");
+    const weapon = weaponPickups.find(
+      (w) => w.x === pickup.x && w.y === pickup.y && w.weapon === weaponType,
+    );
+
+    if (weapon && weapon.active) {
+      weapon.active = false;
+      weapon.collectedAt = Date.now();
+    }
+  }
 });
 
 // Register weapon pickup counter with HUD Layout Manager
