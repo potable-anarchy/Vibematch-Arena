@@ -30,16 +30,27 @@ A fast-paced, top-down multiplayer shooter inspired by Hotline Miami and classic
 ### Prerequisites
 - Node.js 18+ or Docker
 
-### Option 1: Docker (Recommended)
+### Option 1: Docker (Recommended - Mimics Render Deployment)
 
 ```bash
-# Build and run with Docker Compose
-docker-compose up --build
+# Development mode (mimics Render deployment)
+docker-compose up dev
 
-# Or with plain Docker
-docker build -t vibematch-arena .
-docker run -p 3000:3000 vibematch-arena
+# Or run in background
+docker-compose up dev -d
+
+# View logs
+docker-compose logs dev -f
+
+# Stop container
+docker-compose down
 ```
+
+The dev container:
+- Runs on port 5500 (http://localhost:5500)
+- Uses NODE_ENV=production (same as Render)
+- Mounts source files for live development
+- Automatically restarts on crashes
 
 ### Option 2: Node.js
 
@@ -51,9 +62,26 @@ npm install
 npm start
 ```
 
-Then open http://localhost:3000 in your browser.
+Then open http://localhost:5500 in your browser.
 
 ## Deployment
+
+### Local Production (with Cloudflare Tunnel)
+
+To run the production setup with Cloudflare Tunnel:
+
+```bash
+# Set your Cloudflare tunnel token
+export TUNNEL_TOKEN=your_cloudflare_tunnel_token
+
+# Run production stack
+docker-compose --profile production up
+
+# Or in background
+docker-compose --profile production up -d
+```
+
+This runs both the game server and cloudflared tunnel for secure public access.
 
 ### Render
 

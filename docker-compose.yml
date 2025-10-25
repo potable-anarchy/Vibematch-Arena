@@ -1,7 +1,26 @@
 version: "3.8"
 
 services:
-  game-server:
+  # Development server (mimics Render deployment)
+  # Usage: docker-compose up dev
+  dev:
+    build: .
+    ports:
+      - "5500:5500"
+    environment:
+      - NODE_ENV=production
+      - PORT=5500
+    volumes:
+      # Mount source code for live development (optional - comment out for pure Render-like behavior)
+      - ./public:/app/public:ro
+      - ./server.js:/app/server.js:ro
+      - ./package.json:/app/package.json:ro
+    command: node server.js
+    restart: unless-stopped
+
+  # Production server with cloudflared tunnel
+  # Usage: docker-compose up production
+  production:
     build: .
     ports:
       - "${BIND_IP:-127.0.0.1}:5500:5500"
@@ -11,6 +30,8 @@ services:
     restart: unless-stopped
     networks:
       - game-network
+    profiles:
+      - production
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -21,7 +42,9 @@ services:
     networks:
       - game-network
     depends_on:
-      - game-server
+      - production
+    profiles:
+      - production
 
 networks:
   game-network:

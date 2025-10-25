@@ -51,6 +51,9 @@ const io = new Server(httpServer, {
     origin: "*",
     methods: ["GET", "POST"],
   },
+  transports: ["websocket", "polling"],
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 const PORT = process.env.PORT || 5500;
@@ -98,8 +101,30 @@ const SOUND_CONFIG = {
 
 // Weapon configs
 const WEAPONS = {
-  pistol: { damage: 20, rof: 6, mag: 12, reload: 1.2, range: 800, bloom: 0.02 },
-  smg: { damage: 12, rof: 12, mag: 30, reload: 1.8, range: 600, bloom: 0.05 },
+  pistol: {
+    damage: 20,
+    rof: 6,
+    mag: 12,
+    reload: 1.2,
+    range: 800,
+    bloom: 0.02,
+    // Bot tactical ranges
+    optimalRange: { min: 100, max: 300 },
+    minEngageRange: 50,
+    maxEngageRange: 400,
+  },
+  smg: {
+    damage: 12,
+    rof: 12,
+    mag: 30,
+    reload: 1.8,
+    range: 600,
+    bloom: 0.05,
+    // Bot tactical ranges - close to medium, aggressive
+    optimalRange: { min: 80, max: 250 },
+    minEngageRange: 40,
+    maxEngageRange: 350,
+  },
   shotgun: {
     damage: 8,
     pellets: 10,
@@ -108,6 +133,10 @@ const WEAPONS = {
     reload: 2.5,
     range: 300,
     spread: 0.12,
+    // Bot tactical ranges - very aggressive close range
+    optimalRange: { min: 50, max: 150 },
+    minEngageRange: 20,
+    maxEngageRange: 200,
   },
   rifle: {
     damage: 30,
@@ -116,6 +145,10 @@ const WEAPONS = {
     reload: 1.7,
     range: 1200,
     bloom: 0.008,
+    // Bot tactical ranges - medium to long range
+    optimalRange: { min: 200, max: 450 },
+    minEngageRange: 100,
+    maxEngageRange: 600,
   },
 };
 
@@ -177,19 +210,73 @@ const CRATES = [
 
 // Spawn points for players (safe from walls)
 const SPAWN_POINTS = [
-  { x: 100, y: 100 },     // Top-left open area
-  { x: 1900, y: 100 },    // Top-right open area
-  { x: 100, y: 1900 },    // Bottom-left open area
-  { x: 1900, y: 1900 },   // Bottom-right open area
-  { x: 450, y: 1000 },    // Left center (away from corridors)
-  { x: 1550, y: 1000 },   // Right center (away from corridors)
-  { x: 1000, y: 450 },    // Top center (away from center structure)
-  { x: 1000, y: 1550 },   // Bottom center (away from center structure)
-  { x: 400, y: 400 },     // Near NW cover but clear
-  { x: 1600, y: 400 },    // Near NE cover but clear
-  { x: 400, y: 1600 },    // Near SW cover but clear
-  { x: 1600, y: 1600 },   // Near SE cover but clear
+  { x: 100, y: 100 }, // Top-left open area
+  { x: 1900, y: 100 }, // Top-right open area
+  { x: 100, y: 1900 }, // Bottom-left open area
+  { x: 1900, y: 1900 }, // Bottom-right open area
+  { x: 450, y: 1000 }, // Left center (away from corridors)
+  { x: 1550, y: 1000 }, // Right center (away from corridors)
+  { x: 1000, y: 450 }, // Top center (away from center structure)
+  { x: 1000, y: 1550 }, // Bottom center (away from center structure)
+  { x: 400, y: 400 }, // Near NW cover but clear
+  { x: 1600, y: 400 }, // Near NE cover but clear
+  { x: 400, y: 1600 }, // Near SW cover but clear
+  { x: 1600, y: 1600 }, // Near SE cover but clear
 ];
+
+// Strategic waypoints for bot patrol and map control
+// Bots will hunt toward these high-value positions when not in combat
+const STRATEGIC_WAYPOINTS = [
+  // Center control (most important - center of map)
+  { x: 1000, y: 1000, priority: 10, name: "Center" },
+
+  // Corner control points (near cover and spawns)
+  { x: 300, y: 300, priority: 8, name: "NW Corner" },
+  { x: 1700, y: 300, priority: 8, name: "NE Corner" },
+  { x: 300, y: 1700, priority: 8, name: "SW Corner" },
+  { x: 1700, y: 1700, priority: 8, name: "SE Corner" },
+
+  // Mid-map chokepoints (control corridors)
+  { x: 700, y: 500, priority: 7, name: "West Corridor" },
+  { x: 1300, y: 500, priority: 7, name: "East Corridor" },
+  { x: 700, y: 1500, priority: 7, name: "South-West Corridor" },
+  { x: 1300, y: 1500, priority: 7, name: "South-East Corridor" },
+
+  // Flank routes (less priority but good for positioning)
+  { x: 500, y: 1000, priority: 5, name: "West Flank" },
+  { x: 1500, y: 1000, priority: 5, name: "East Flank" },
+  { x: 1000, y: 500, priority: 5, name: "North Flank" },
+  { x: 1000, y: 1500, priority: 5, name: "South Flank" },
+];
+
+// Get a strategic waypoint for bot to patrol toward
+function getStrategicWaypoint(botX, botY) {
+  // Filter out waypoints that are too close (< 200px)
+  const validWaypoints = STRATEGIC_WAYPOINTS.filter((wp) => {
+    const dx = wp.x - botX;
+    const dy = wp.y - botY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    return dist > 200; // Don't pick waypoints we're already at
+  });
+
+  if (validWaypoints.length === 0) return null;
+
+  // Weight by priority, with some randomness
+  const totalPriority = validWaypoints.reduce(
+    (sum, wp) => sum + wp.priority,
+    0,
+  );
+  let random = Math.random() * totalPriority;
+
+  for (const wp of validWaypoints) {
+    random -= wp.priority;
+    if (random <= 0) {
+      return wp;
+    }
+  }
+
+  return validWaypoints[0];
+}
 
 // Initialize pickups
 function initializePickups() {
@@ -240,7 +327,7 @@ function circleRectCollision(cx, cy, radius, rx, ry, rw, rh) {
   const distY = cy - closestY;
   const distSquared = distX * distX + distY * distY;
 
-  return distSquared < (radius * radius);
+  return distSquared < radius * radius;
 }
 
 // Find nearest cover (wall or crate) relative to enemy position
@@ -248,7 +335,10 @@ function findNearestCover(botX, botY, enemyX, enemyY, maxDist = 250) {
   let bestCover = null;
   let bestScore = -Infinity;
 
-  const allObstacles = [...WALLS, ...CRATES.map(c => ({ x: c.x, y: c.y, width: c.size, height: c.size }))];
+  const allObstacles = [
+    ...WALLS,
+    ...CRATES.map((c) => ({ x: c.x, y: c.y, width: c.size, height: c.size })),
+  ];
 
   for (const obstacle of allObstacles) {
     const coverX = obstacle.x + obstacle.width / 2;
@@ -259,8 +349,12 @@ function findNearestCover(botX, botY, enemyX, enemyY, maxDist = 250) {
     if (distToCover > maxDist || distToCover < 50) continue;
 
     // Check if cover is between bot and enemy
-    const coverToEnemyDist = Math.sqrt((enemyX - coverX) ** 2 + (enemyY - coverY) ** 2);
-    const botToEnemyDist = Math.sqrt((enemyX - botX) ** 2 + (enemyY - botY) ** 2);
+    const coverToEnemyDist = Math.sqrt(
+      (enemyX - coverX) ** 2 + (enemyY - coverY) ** 2,
+    );
+    const botToEnemyDist = Math.sqrt(
+      (enemyX - botX) ** 2 + (enemyY - botY) ** 2,
+    );
 
     // Prefer cover that's closer and blocks line to enemy
     const blocksEnemy = coverToEnemyDist < botToEnemyDist ? 2.0 : 0.3;
@@ -347,14 +441,26 @@ function findBestPickup(bot) {
 function checkWallCollision(x, y, radius) {
   // Check walls
   for (const wall of WALLS) {
-    if (circleRectCollision(x, y, radius, wall.x, wall.y, wall.width, wall.height)) {
+    if (
+      circleRectCollision(x, y, radius, wall.x, wall.y, wall.width, wall.height)
+    ) {
       return true;
     }
   }
 
   // Check crates
   for (const crate of CRATES) {
-    if (circleRectCollision(x, y, radius, crate.x, crate.y, crate.size, crate.size)) {
+    if (
+      circleRectCollision(
+        x,
+        y,
+        radius,
+        crate.x,
+        crate.y,
+        crate.size,
+        crate.size,
+      )
+    ) {
       return true;
     }
   }
@@ -376,7 +482,17 @@ function hasLineOfSight(x1, y1, x2, y2) {
 
   // Check walls
   for (const wall of WALLS) {
-    const dist = rayRectIntersection(x1, y1, rayDx, rayDy, distance, wall.x, wall.y, wall.width, wall.height);
+    const dist = rayRectIntersection(
+      x1,
+      y1,
+      rayDx,
+      rayDy,
+      distance,
+      wall.x,
+      wall.y,
+      wall.width,
+      wall.height,
+    );
     if (dist !== null && dist < distance) {
       return false; // Wall blocks line of sight
     }
@@ -384,7 +500,17 @@ function hasLineOfSight(x1, y1, x2, y2) {
 
   // Check crates
   for (const crate of CRATES) {
-    const dist = rayRectIntersection(x1, y1, rayDx, rayDy, distance, crate.x, crate.y, crate.size, crate.size);
+    const dist = rayRectIntersection(
+      x1,
+      y1,
+      rayDx,
+      rayDy,
+      distance,
+      crate.x,
+      crate.y,
+      crate.size,
+      crate.size,
+    );
     if (dist !== null && dist < distance) {
       return false; // Crate blocks line of sight
     }
@@ -409,7 +535,9 @@ function createSoundEvent(x, y, type, sourceId) {
 // Clean up expired sound events
 function cleanupSoundEvents() {
   const now = Date.now();
-  gameState.soundEvents = gameState.soundEvents.filter(event => event.expiresAt > now);
+  gameState.soundEvents = gameState.soundEvents.filter(
+    (event) => event.expiresAt > now,
+  );
 }
 
 // Get spawn point farthest from other players and bots
@@ -454,8 +582,16 @@ function getSpawnPoint(players) {
 
 // Bot name generator
 const BOT_NAMES = [
-  "TargetBot", "PracticeBot", "TestDummy", "TrainingBot", "AIBot",
-  "BotAlpha", "BotBravo", "BotCharlie", "BotDelta", "BotEcho"
+  "TargetBot",
+  "PracticeBot",
+  "TestDummy",
+  "TrainingBot",
+  "AIBot",
+  "BotAlpha",
+  "BotBravo",
+  "BotCharlie",
+  "BotDelta",
+  "BotEcho",
 ];
 
 // Create a bot
@@ -492,6 +628,10 @@ function createBot() {
     wanderAngle: Math.random() * Math.PI * 2,
     wanderTimer: Date.now() + Math.random() * 3000,
     thinkTimer: Date.now(),
+    // Position tracking to detect getting stuck in areas
+    areaCheckTimer: Date.now(),
+    lastAreaCheckPos: { x: spawn.x, y: spawn.y },
+    totalDistanceMoved: 0,
   };
 
   gameState.bots.set(id, bot);
@@ -523,14 +663,18 @@ function maintainBotCount() {
 
   if (botsToAdd > 0) {
     // Need to add more bots
-    console.log(`🤖 Adding ${botsToAdd} bots (${humanPlayers} humans, ${currentBots} bots -> ${neededBots} needed)`);
+    console.log(
+      `🤖 Adding ${botsToAdd} bots (${humanPlayers} humans, ${currentBots} bots -> ${neededBots} needed)`,
+    );
     for (let i = 0; i < botsToAdd; i++) {
       createBot();
     }
   } else if (botsToAdd < 0) {
     // Need to remove bots
     const botsToRemove = Math.abs(botsToAdd);
-    console.log(`🤖 Removing ${botsToRemove} bots (${humanPlayers} humans, ${currentBots} bots -> ${neededBots} needed)`);
+    console.log(
+      `🤖 Removing ${botsToRemove} bots (${humanPlayers} humans, ${currentBots} bots -> ${neededBots} needed)`,
+    );
     for (let i = 0; i < botsToRemove; i++) {
       if (gameState.bots.size > 0) {
         removeBot();
@@ -641,7 +785,17 @@ function raycast(x, y, angle, range, shooterId) {
 
   // Check wall collisions first
   for (const wall of WALLS) {
-    const dist = rayRectIntersection(x, y, rayDx, rayDy, range, wall.x, wall.y, wall.width, wall.height);
+    const dist = rayRectIntersection(
+      x,
+      y,
+      rayDx,
+      rayDy,
+      range,
+      wall.x,
+      wall.y,
+      wall.width,
+      wall.height,
+    );
     if (dist !== null && dist < closestDist) {
       closestDist = dist;
       closestHit = { wall: true, distance: dist };
@@ -650,7 +804,17 @@ function raycast(x, y, angle, range, shooterId) {
 
   // Check crate collisions
   for (const crate of CRATES) {
-    const dist = rayRectIntersection(x, y, rayDx, rayDy, range, crate.x, crate.y, crate.size, crate.size);
+    const dist = rayRectIntersection(
+      x,
+      y,
+      rayDx,
+      rayDy,
+      range,
+      crate.x,
+      crate.y,
+      crate.size,
+      crate.size,
+    );
     if (dist !== null && dist < closestDist) {
       closestDist = dist;
       closestHit = { wall: true, distance: dist };
@@ -786,7 +950,9 @@ io.on("connection", (socket) => {
     try {
       const player = gameState.players.get(socket.id);
       if (player) {
-        console.log(`👻 Player ${player.name} (${socket.id}) switching to spectator mode`);
+        console.log(
+          `👻 Player ${player.name} (${socket.id}) switching to spectator mode`,
+        );
 
         // Remove player from game without marking as disconnect
         gameState.players.delete(socket.id);
@@ -901,7 +1067,7 @@ function handleShoot(player) {
   });
 
   // Create gunshot sound event for bots to hear
-  createSoundEvent(player.x, player.y, 'gunshot', player.id);
+  createSoundEvent(player.x, player.y, "gunshot", player.id);
 }
 
 // Game loop
@@ -921,6 +1087,10 @@ function gameLoop() {
 
     // Update bots AI
     for (const [id, bot] of gameState.bots) {
+      // Track current target info (persists outside think block for area check)
+      let nearestTarget = bot.currentTarget || null;
+      let nearestDist = bot.currentTargetDist || Infinity;
+
       if (bot.health <= 0) {
         // Handle bot respawn
         if (bot.respawnAt && now >= bot.respawnAt) {
@@ -934,6 +1104,8 @@ function gameLoop() {
           bot.respawnAt = null;
           bot.reloading = false;
           bot.wanderAngle = Math.random() * Math.PI * 2;
+          bot.currentTarget = null;
+          bot.currentTargetDist = Infinity;
         }
         continue;
       }
@@ -943,7 +1115,7 @@ function gameLoop() {
         bot.thinkTimer = now + 200;
 
         // LISTEN for sounds (gunshots and footsteps)
-        let heardSound = null;
+        let heardGunshot = null;
         for (const sound of gameState.soundEvents) {
           if (sound.sourceId === id) continue; // Don't hear own sounds
 
@@ -952,24 +1124,41 @@ function gameLoop() {
           const dist = Math.sqrt(dx * dx + dy * dy);
 
           // Check if sound is within hearing range
-          const hearingRange = sound.type === 'gunshot' ? SOUND_CONFIG.GUNSHOT_RANGE : SOUND_CONFIG.FOOTSTEP_RANGE;
+          const hearingRange =
+            sound.type === "gunshot"
+              ? SOUND_CONFIG.GUNSHOT_RANGE
+              : SOUND_CONFIG.FOOTSTEP_RANGE;
 
           if (dist < hearingRange) {
-            // Remember this sound (investigate location even if can't see source)
-            if (!heardSound || dist < heardSound.dist) {
-              heardSound = { x: sound.x, y: sound.y, dist, type: sound.type };
+            // Prioritize gunshots over footsteps
+            if (sound.type === "gunshot") {
+              if (!heardGunshot || dist < heardGunshot.dist) {
+                heardGunshot = {
+                  x: sound.x,
+                  y: sound.y,
+                  dist,
+                  type: sound.type,
+                };
+              }
             }
           }
         }
 
-        // Store the most recent heard sound for investigation
-        if (heardSound) {
-          bot.lastHeardSound = heardSound;
+        // Gunshots always override current investigation
+        if (heardGunshot) {
+          bot.lastHeardSound = heardGunshot;
         }
+
+        // Assess bot state for decision making
+        const healthPercent = bot.health / GAME_CONFIG.PLAYER_MAX_HEALTH;
+        const isLowHealth = healthPercent < 0.35; // More aggressive threshold
+        const hasArmor = bot.armor > 20; // Lower armor threshold for aggression
+        const isAggressive = hasArmor || healthPercent > 0.6; // More likely to be aggressive
 
         // Find nearest VISIBLE target (human players or other bots)
         let nearestTarget = null;
         let nearestDist = Infinity;
+        const VISION_RANGE = 900; // Increased from 600 for more action
 
         // Check human players - only if bot can see them
         for (const player of gameState.players.values()) {
@@ -979,7 +1168,10 @@ function gameLoop() {
           const dist = Math.sqrt(dx * dx + dy * dy);
 
           // Only consider targets within vision range AND with clear line of sight
-          if (dist < 600 && hasLineOfSight(bot.x, bot.y, player.x, player.y)) {
+          if (
+            dist < VISION_RANGE &&
+            hasLineOfSight(bot.x, bot.y, player.x, player.y)
+          ) {
             if (dist < nearestDist) {
               nearestDist = dist;
               nearestTarget = player;
@@ -995,7 +1187,10 @@ function gameLoop() {
           const dist = Math.sqrt(dx * dx + dy * dy);
 
           // Only consider targets within vision range AND with clear line of sight
-          if (dist < 600 && hasLineOfSight(bot.x, bot.y, otherBot.x, otherBot.y)) {
+          if (
+            dist < VISION_RANGE &&
+            hasLineOfSight(bot.x, bot.y, otherBot.x, otherBot.y)
+          ) {
             if (dist < nearestDist) {
               nearestDist = dist;
               nearestTarget = otherBot;
@@ -1003,67 +1198,169 @@ function gameLoop() {
           }
         }
 
-        // If target in range, engage tactically
-        if (nearestTarget && nearestDist < 450) {
+        // Remember last known enemy position for hunting
+        if (nearestTarget) {
+          bot.lastKnownEnemy = {
+            x: nearestTarget.x,
+            y: nearestTarget.y,
+            time: now,
+          };
+        }
+
+        // BEHAVIOR: Low health - retreat to find health
+        if (isLowHealth && !nearestTarget) {
+          const healthPickup = findBestPickup(bot);
+          if (healthPickup && healthPickup.type.startsWith("health")) {
+            const dx = healthPickup.x - bot.x;
+            const dy = healthPickup.y - bot.y;
+            const distToHealth = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+
+            // Move fast and directly when health is close and visible
+            if (
+              distToHealth < 200 &&
+              hasLineOfSight(bot.x, bot.y, healthPickup.x, healthPickup.y)
+            ) {
+              const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.85;
+              bot.vx = Math.cos(angle) * moveSpeed;
+              bot.vy = Math.sin(angle) * moveSpeed;
+              bot.aimAngle = angle;
+            } else {
+              // Navigate around obstacles to reach health
+              const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.75;
+              bot.vx = Math.cos(angle) * moveSpeed;
+              bot.vy = Math.sin(angle) * moveSpeed;
+              bot.aimAngle = angle;
+              bot.wanderAngle = angle; // Help wall sliding continue in right direction
+            }
+          } else {
+            // No health nearby, just retreat from last known danger
+            if (bot.lastHeardSound) {
+              const dx = bot.x - bot.lastHeardSound.x;
+              const dy = bot.y - bot.lastHeardSound.y;
+              const retreatAngle = Math.atan2(dy, dx);
+              const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.7;
+              bot.vx = Math.cos(retreatAngle) * moveSpeed;
+              bot.vy = Math.sin(retreatAngle) * moveSpeed;
+              bot.aimAngle = retreatAngle + Math.PI; // Look behind while retreating
+            }
+          }
+        }
+        // BEHAVIOR: Low health WITH visible target - engage defensively
+        else if (isLowHealth && nearestTarget) {
           const dx = nearestTarget.x - bot.x;
           const dy = nearestTarget.y - bot.y;
           bot.aimAngle = Math.atan2(dy, dx);
 
-          const IDEAL_COMBAT_RANGE = 200; // Maintain this distance
-          const MIN_COMBAT_RANGE = 100; // Too close, back up
+          // Keep distance and retreat while shooting
+          const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.6;
+          bot.vx = -Math.cos(bot.aimAngle) * moveSpeed;
+          bot.vy = -Math.sin(bot.aimAngle) * moveSpeed;
 
-          // Try to find cover (only check occasionally, not every think cycle)
-          let cover = null;
-          if (!bot.lastCoverCheck || now - bot.lastCoverCheck > 1000) {
-            cover = findNearestCover(bot.x, bot.y, nearestTarget.x, nearestTarget.y);
-            bot.cachedCover = cover;
-            bot.lastCoverCheck = now;
-          } else {
-            cover = bot.cachedCover;
-          }
-
-          // Movement logic based on distance and cover
-          if (nearestDist < MIN_COMBAT_RANGE) {
-            // Too close - back away while shooting
-            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
-            bot.vx = -Math.cos(bot.aimAngle) * moveSpeed;
-            bot.vy = -Math.sin(bot.aimAngle) * moveSpeed;
-          } else if (cover && nearestDist > 150) {
-            // Move toward cover when at medium range
-            const coverDx = cover.x - bot.x;
-            const coverDy = cover.y - bot.y;
-            const coverAngle = Math.atan2(coverDy, coverDx);
-            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.4;
-            bot.vx = Math.cos(coverAngle) * moveSpeed;
-            bot.vy = Math.sin(coverAngle) * moveSpeed;
-          } else if (nearestDist > IDEAL_COMBAT_RANGE + 50) {
-            // Too far - move closer
-            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.4;
-            bot.vx = Math.cos(bot.aimAngle) * moveSpeed;
-            bot.vy = Math.sin(bot.aimAngle) * moveSpeed;
-          } else {
-            // Good range - strafe to make harder target
-            const strafeAngle = bot.aimAngle + Math.PI / 2;
-            const strafeDir = Math.random() > 0.5 ? 1 : -1;
-            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.3;
-            bot.vx = Math.cos(strafeAngle) * moveSpeed * strafeDir;
-            bot.vy = Math.sin(strafeAngle) * moveSpeed * strafeDir;
-          }
-
-          // Shoot when in good range AND has clear line of sight
-          if (nearestDist >= MIN_COMBAT_RANGE && nearestDist <= 350 && Math.random() < 0.5) {
-            // Double-check line of sight before shooting (in case target moved behind cover)
-            if (hasLineOfSight(bot.x, bot.y, nearestTarget.x, nearestTarget.y)) {
+          // Shoot if in range
+          if (nearestDist <= 400 && Math.random() < 0.4) {
+            if (
+              hasLineOfSight(bot.x, bot.y, nearestTarget.x, nearestTarget.y)
+            ) {
               handleShoot(bot);
             }
           }
-        } else if (bot.lastHeardSound && bot.lastHeardSound.dist > 50) {
-          // INVESTIGATE heard sound - move toward it
+        }
+        // BEHAVIOR: Target in range, engage tactically
+        else if (nearestTarget) {
+          // Get weapon-specific tactical ranges
+          const weaponData = WEAPONS[bot.weapon];
+          const canEngage = nearestDist <= weaponData.maxEngageRange;
+
+          if (canEngage) {
+            const dx = nearestTarget.x - bot.x;
+            const dy = nearestTarget.y - bot.y;
+            bot.aimAngle = Math.atan2(dy, dx);
+
+            // Weapon-specific combat ranges
+            const optimalMin = weaponData.optimalRange.min;
+            const optimalMax = weaponData.optimalRange.max;
+            const minRange = weaponData.minEngageRange;
+
+            // Adjust ranges based on aggression
+            const aggressionFactor = isAggressive ? 0.8 : 1.0;
+            const effectiveOptimalMin = optimalMin * aggressionFactor;
+            const effectiveOptimalMax = optimalMax * aggressionFactor;
+
+            // Movement logic based on weapon and distance
+            if (nearestDist < minRange) {
+              // Too close - back away while shooting
+              const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.65;
+              bot.vx = -Math.cos(bot.aimAngle) * moveSpeed;
+              bot.vy = -Math.sin(bot.aimAngle) * moveSpeed;
+            } else if (nearestDist < effectiveOptimalMin) {
+              // Approaching optimal range - back up slightly
+              const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
+              bot.vx = -Math.cos(bot.aimAngle) * moveSpeed;
+              bot.vy = -Math.sin(bot.aimAngle) * moveSpeed;
+            } else if (nearestDist > effectiveOptimalMax) {
+              // Too far - move closer aggressively
+              const moveSpeed =
+                GAME_CONFIG.PLAYER_SPEED * (isAggressive ? 0.75 : 0.6);
+              bot.vx = Math.cos(bot.aimAngle) * moveSpeed;
+              bot.vy = Math.sin(bot.aimAngle) * moveSpeed;
+            } else {
+              // In optimal range - strafe perpendicular to enemy
+              const strafeAngle = bot.aimAngle + Math.PI / 2;
+              // Strafe consistently in one direction until changing
+              if (!bot.strafeDir || Math.random() < 0.05) {
+                bot.strafeDir = Math.random() > 0.5 ? 1 : -1;
+              }
+              const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
+              bot.vx = Math.cos(strafeAngle) * moveSpeed * bot.strafeDir;
+              bot.vy = Math.sin(strafeAngle) * moveSpeed * bot.strafeDir;
+            }
+
+            // Shoot when in effective range - very aggressive
+            const shootChance = isAggressive ? 0.9 : 0.75;
+            if (
+              nearestDist >= minRange &&
+              nearestDist <= weaponData.maxEngageRange &&
+              Math.random() < shootChance
+            ) {
+              if (
+                hasLineOfSight(bot.x, bot.y, nearestTarget.x, nearestTarget.y)
+              ) {
+                handleShoot(bot);
+              }
+            }
+          }
+        }
+        // BEHAVIOR: Hunt last known enemy position
+        else if (bot.lastKnownEnemy && now - bot.lastKnownEnemy.time < 8000) {
+          // Hunt toward last known position for 8 seconds
+          const dx = bot.lastKnownEnemy.x - bot.x;
+          const dy = bot.lastKnownEnemy.y - bot.y;
+          const distToLastKnown = Math.sqrt(dx * dx + dy * dy);
+
+          if (distToLastKnown > 100) {
+            const angleToEnemy = Math.atan2(dy, dx);
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.8; // Hunt aggressively
+            bot.vx = Math.cos(angleToEnemy) * moveSpeed;
+            bot.vy = Math.sin(angleToEnemy) * moveSpeed;
+            bot.aimAngle = angleToEnemy;
+            bot.wanderAngle = angleToEnemy;
+          } else {
+            // Reached last known position, clear it
+            bot.lastKnownEnemy = null;
+          }
+        }
+        // BEHAVIOR: Heard gunshot - run toward it
+        else if (
+          bot.lastHeardSound &&
+          bot.lastHeardSound.type === "gunshot" &&
+          bot.lastHeardSound.dist > 50
+        ) {
           const dx = bot.lastHeardSound.x - bot.x;
           const dy = bot.lastHeardSound.y - bot.y;
           const angleToSound = Math.atan2(dy, dx);
 
-          const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.6;
+          const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.8; // Run fast toward gunfire
           bot.vx = Math.cos(angleToSound) * moveSpeed;
           bot.vy = Math.sin(angleToSound) * moveSpeed;
           bot.aimAngle = angleToSound;
@@ -1072,65 +1369,182 @@ function gameLoop() {
           if (bot.lastHeardSound.dist < 50) {
             bot.lastHeardSound = null;
           }
-        } else {
-          // No active target - roam for pickups
+        }
+        // BEHAVIOR: Seek valuable pickups (armor/weapons) or control strategic positions
+        else {
           bot.lastHeardSound = null; // Clear old sound
-          const bestPickup = findBestPickup(bot);
 
-          if (bestPickup) {
-            // Move toward the best pickup
+          // Prioritize armor and weapon pickups
+          const bestPickup = findBestPickup(bot);
+          const shouldSeekPickup =
+            bestPickup &&
+            (bestPickup.type.startsWith("armor") ||
+              bestPickup.type.startsWith("weapon") ||
+              (bestPickup.type.startsWith("health") && bot.health < 70));
+
+          if (shouldSeekPickup) {
+            // Seek valuable pickup
             const dx = bestPickup.x - bot.x;
             const dy = bestPickup.y - bot.y;
+            const distToPickup = Math.sqrt(dx * dx + dy * dy);
             const angle = Math.atan2(dy, dx);
-            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.6;
+
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.75;
             bot.vx = Math.cos(angle) * moveSpeed;
             bot.vy = Math.sin(angle) * moveSpeed;
             bot.aimAngle = angle;
+            bot.wanderAngle = angle;
           } else {
-            // No useful pickups - wander randomly
-            if (now > bot.wanderTimer) {
-              bot.wanderAngle = Math.random() * Math.PI * 2;
-              bot.wanderTimer = now + 2000 + Math.random() * 2000;
+            // No valuable pickups - control strategic waypoints
+            // Change waypoint every 5-8 seconds or when reached
+            if (!bot.strategicWaypoint || now > bot.waypointTimer) {
+              bot.strategicWaypoint = getStrategicWaypoint(bot.x, bot.y);
+              bot.waypointTimer = now + 5000 + Math.random() * 3000;
             }
-            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
-            bot.vx = Math.cos(bot.wanderAngle) * moveSpeed;
-            bot.vy = Math.sin(bot.wanderAngle) * moveSpeed;
-            // Look in movement direction when wandering
-            bot.aimAngle = bot.wanderAngle;
+
+            if (bot.strategicWaypoint) {
+              const dx = bot.strategicWaypoint.x - bot.x;
+              const dy = bot.strategicWaypoint.y - bot.y;
+              const distToWaypoint = Math.sqrt(dx * dx + dy * dy);
+
+              if (distToWaypoint < 100) {
+                // Reached waypoint, pick a new one
+                bot.strategicWaypoint = getStrategicWaypoint(bot.x, bot.y);
+                bot.waypointTimer = now + 5000 + Math.random() * 3000;
+              } else {
+                // Move toward strategic waypoint
+                const angle = Math.atan2(dy, dx);
+                const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.7;
+                bot.vx = Math.cos(angle) * moveSpeed;
+                bot.vy = Math.sin(angle) * moveSpeed;
+                bot.aimAngle = angle;
+                bot.wanderAngle = angle;
+              }
+            }
           }
         }
+
+        // Store target info for use outside think block
+        bot.currentTarget = nearestTarget;
+        bot.currentTargetDist = nearestDist;
       }
 
-      // Move bot with collision detection
+      // Move bot with collision detection and wall sliding
       const newX = bot.x + bot.vx * dt;
       const newY = bot.y + bot.vy * dt;
 
       let moved = false;
-      if (!checkWallCollision(newX, bot.y, GAME_CONFIG.PLAYER_RADIUS)) {
+      const hitX = checkWallCollision(newX, bot.y, GAME_CONFIG.PLAYER_RADIUS);
+      const hitY = checkWallCollision(bot.x, newY, GAME_CONFIG.PLAYER_RADIUS);
+
+      // Try to move on both axes
+      if (!hitX) {
         bot.x = newX;
         moved = true;
-      } else {
-        // Hit wall, change wander direction
-        bot.wanderAngle = Math.random() * Math.PI * 2;
       }
 
-      if (!checkWallCollision(bot.x, newY, GAME_CONFIG.PLAYER_RADIUS)) {
+      if (!hitY) {
         bot.y = newY;
         moved = true;
+      }
+
+      // Wall sliding behavior - if we hit on one axis but not the other, keep sliding
+      if (hitX && !hitY) {
+        // Hit wall on X, but can slide along Y
+        bot.y = newY;
+        moved = true;
+      } else if (hitY && !hitX) {
+        // Hit wall on Y, but can slide along X
+        bot.x = newX;
+        moved = true;
+      }
+
+      // Corner detection - stuck on both axes
+      if (hitX && hitY) {
+        // We're in a corner or stuck - track how long we've been stuck
+        if (!bot.stuckTimer) {
+          bot.stuckTimer = now;
+        } else if (now - bot.stuckTimer > 300) {
+          // Been stuck for 300ms - strafe away from the corner
+          bot.wanderAngle = Math.random() * Math.PI * 2;
+
+          // Try moving perpendicular to current direction
+          const escapeAngle =
+            bot.wanderAngle +
+            (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
+          const escapeSpeed = GAME_CONFIG.PLAYER_SPEED * 0.9;
+          bot.vx = Math.cos(escapeAngle) * escapeSpeed;
+          bot.vy = Math.sin(escapeAngle) * escapeSpeed;
+
+          bot.stuckTimer = null; // Reset stuck timer
+
+          // If we're stuck while trying to reach a pickup, give up on it
+          if (bot.targetPickupId) {
+            bot.targetPickupId = null;
+            bot.pickupCommitTime = null;
+            console.log(`🤖 ${bot.name} gave up on unreachable pickup`);
+          }
+        }
       } else {
-        // Hit wall, change wander direction
-        bot.wanderAngle = Math.random() * Math.PI * 2;
+        // Not stuck, reset timer
+        bot.stuckTimer = null;
       }
 
       // Create footstep sounds when bot moves (every 300ms)
-      if (moved && (bot.vx !== 0 || bot.vy !== 0) && now - bot.lastFootstepSound > 300) {
-        createSoundEvent(bot.x, bot.y, 'footstep', bot.id);
+      if (
+        moved &&
+        (bot.vx !== 0 || bot.vy !== 0) &&
+        now - bot.lastFootstepSound > 300
+      ) {
+        createSoundEvent(bot.x, bot.y, "footstep", bot.id);
         bot.lastFootstepSound = now;
       }
 
       // Clamp to world bounds
-      bot.x = Math.max(GAME_CONFIG.PLAYER_RADIUS, Math.min(GAME_CONFIG.WORLD_WIDTH - GAME_CONFIG.PLAYER_RADIUS, bot.x));
-      bot.y = Math.max(GAME_CONFIG.PLAYER_RADIUS, Math.min(GAME_CONFIG.WORLD_HEIGHT - GAME_CONFIG.PLAYER_RADIUS, bot.y));
+      bot.x = Math.max(
+        GAME_CONFIG.PLAYER_RADIUS,
+        Math.min(GAME_CONFIG.WORLD_WIDTH - GAME_CONFIG.PLAYER_RADIUS, bot.x),
+      );
+      bot.y = Math.max(
+        GAME_CONFIG.PLAYER_RADIUS,
+        Math.min(GAME_CONFIG.WORLD_HEIGHT - GAME_CONFIG.PLAYER_RADIUS, bot.y),
+      );
+
+      // Track distance moved to detect if bot is stuck in an area
+      const distThisFrame = Math.sqrt(
+        Math.pow(bot.x - bot.lastAreaCheckPos.x, 2) +
+          Math.pow(bot.y - bot.lastAreaCheckPos.y, 2),
+      );
+      bot.totalDistanceMoved += distThisFrame;
+      bot.lastAreaCheckPos = { x: bot.x, y: bot.y };
+
+      // Check every 3 seconds if bot has made meaningful progress
+      if (now - bot.areaCheckTimer > 3000) {
+        // If bot hasn't moved at least 200 pixels in 3 seconds, force relocation
+        // Exception: if bot is in combat, low health retreating, or just collected pickup
+        const hasTarget = nearestTarget && nearestDist < 450;
+        const isRetreating = bot.health < GAME_CONFIG.PLAYER_MAX_HEALTH * 0.4;
+
+        if (bot.totalDistanceMoved < 200 && !hasTarget && !isRetreating) {
+          // Bot is stuck in an area - pick a random new destination far away
+          const targetX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 400) + 200;
+          const targetY =
+            Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 400) + 200;
+
+          const angleToTarget = Math.atan2(targetY - bot.y, targetX - bot.x);
+          bot.wanderAngle = angleToTarget;
+          bot.wanderTimer = now + 5000; // Keep this direction for 5 seconds
+
+          // Clear any heard sounds to force movement
+          bot.lastHeardSound = null;
+
+          console.log(`🤖 ${bot.name} stuck in area, forcing relocation`);
+        }
+
+        // Reset tracking
+        bot.areaCheckTimer = now;
+        bot.totalDistanceMoved = 0;
+      }
 
       // Handle reload
       if (bot.reloading && now >= bot.reloadFinish) {
@@ -1197,6 +1611,10 @@ function gameLoop() {
               playerId: id,
               pickupId: pickup.id,
             });
+
+            // Clear pickup target so bot picks a new one
+            bot.targetPickupId = null;
+            bot.pickupCommitTime = null;
           }
         }
       }
@@ -1231,22 +1649,34 @@ function gameLoop() {
 
       let playerMoved = false;
       // Check X axis collision
-      const xBlocked = checkWallCollision(newX, player.y, GAME_CONFIG.PLAYER_RADIUS);
+      const xBlocked = checkWallCollision(
+        newX,
+        player.y,
+        GAME_CONFIG.PLAYER_RADIUS,
+      );
       if (!xBlocked) {
         player.x = newX;
         playerMoved = true;
       }
 
       // Check Y axis collision
-      const yBlocked = checkWallCollision(player.x, newY, GAME_CONFIG.PLAYER_RADIUS);
+      const yBlocked = checkWallCollision(
+        player.x,
+        newY,
+        GAME_CONFIG.PLAYER_RADIUS,
+      );
       if (!yBlocked) {
         player.y = newY;
         playerMoved = true;
       }
 
       // Create footstep sounds when player moves (every 300ms)
-      if (playerMoved && (player.vx !== 0 || player.vy !== 0) && now - player.lastFootstepSound > 300) {
-        createSoundEvent(player.x, player.y, 'footstep', player.id);
+      if (
+        playerMoved &&
+        (player.vx !== 0 || player.vy !== 0) &&
+        now - player.lastFootstepSound > 300
+      ) {
+        createSoundEvent(player.x, player.y, "footstep", player.id);
         player.lastFootstepSound = now;
       }
 
@@ -1337,7 +1767,7 @@ function gameLoop() {
     // Combine players and bots into one array
     const allPlayers = [
       ...Array.from(gameState.players.values()),
-      ...Array.from(gameState.bots.values())
+      ...Array.from(gameState.bots.values()),
     ];
 
     // Only broadcast state at reduced rate (not every tick)
