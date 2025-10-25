@@ -419,13 +419,14 @@ const WEAPONS = {
     maxEngageRange: 350,
   },
   rifle: {
-    damage: 30,
-    rof: 5,
+    damage: 35,
+    rof: 3,
     mag: 20,
     reload: 1.7,
     range: 1200,
     bloom: 0.008,
     projectileSpeed: 1500, // pixels per second - fastest bullets
+    wallPenetrationChance: 0.3, // 30% chance to penetrate walls
     // Bot tactical ranges - medium to long range
     optimalRange: { min: 200, max: 450 },
     minEngageRange: 100,
@@ -1527,7 +1528,7 @@ function handleShoot(player) {
       const angle = player.aimAngle + spread;
 
       // Create projectile
-      createProjectile(player.x, player.y, angle, weapon, player.id);
+      createProjectile(player.x, player.y, angle, weapon, player.id, player.weapon);
     }
   } else {
     // Other weapons fire single projectile
@@ -1535,7 +1536,7 @@ function handleShoot(player) {
     const angle = player.aimAngle + bloom;
 
     // Create projectile
-    createProjectile(player.x, player.y, angle, weapon, player.id);
+    createProjectile(player.x, player.y, angle, weapon, player.id, player.weapon);
   }
 
   io.emit("shoot", {
@@ -1551,7 +1552,7 @@ function handleShoot(player) {
 }
 
 // Create a projectile
-function createProjectile(x, y, angle, weapon, shooterId) {
+function createProjectile(x, y, angle, weapon, shooterId, weaponName) {
   const projectile = {
     id: gameState.nextProjectileId++,
     x,
@@ -1562,8 +1563,10 @@ function createProjectile(x, y, angle, weapon, shooterId) {
     damage: weapon.damage,
     shooterId,
     weapon: weapon,
+    weaponName: weaponName,
     distanceTraveled: 0,
     maxRange: weapon.range,
+    hasPenetrated: false, // Track if this projectile has already penetrated a wall
   };
 
   gameState.projectiles.push(projectile);
@@ -1621,14 +1624,36 @@ function gameLoop() {
             wall.height,
           )
         ) {
-          // Hit wall - create wall impact
-          io.emit("wallImpact", {
-            x: proj.x,
-            y: proj.y,
-            angle: proj.angle,
-          });
-          hitSomething = true;
-          break;
+          // Check if rifle can penetrate wall
+          const isRifle = proj.weaponName === "rifle";
+          const canPenetrate = isRifle &&
+                               !proj.hasPenetrated &&
+                               proj.weapon.wallPenetrationChance &&
+                               Math.random() < proj.weapon.wallPenetrationChance;
+
+          if (canPenetrate) {
+            // Rifle penetrates the wall!
+            proj.hasPenetrated = true;
+            // Reduce damage after penetration
+            proj.damage = Math.floor(proj.damage * 0.7);
+            // Create penetration effect
+            io.emit("wallPenetration", {
+              x: proj.x,
+              y: proj.y,
+              angle: proj.angle,
+            });
+            // Continue through the wall
+            break;
+          } else {
+            // Hit wall - create wall impact
+            io.emit("wallImpact", {
+              x: proj.x,
+              y: proj.y,
+              angle: proj.angle,
+            });
+            hitSomething = true;
+            break;
+          }
         }
       }
 
