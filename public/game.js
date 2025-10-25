@@ -51,6 +51,10 @@ function generatePlayerName() {
 let playerName = generatePlayerName();
 let isSpectator = true; // Start as spectator
 
+// Smooth camera for spectator mode
+const CAMERA_LERP_SPEED = 2.5; // How fast camera moves toward target
+const CAMERA_DEADZONE = 150; // Pixels of deadzone before camera starts moving
+
 // Mod system
 const modSystem = new ModSystem({
   getState: () => gameState,
@@ -539,13 +543,27 @@ function render(dt) {
       }
     }
 
-    // Follow top scorer if found, otherwise center of world
+    // Determine target camera position
+    let targetX, targetY;
     if (topScorer) {
-      camera.x = topScorer.x;
-      camera.y = topScorer.y;
+      targetX = topScorer.x;
+      targetY = topScorer.y;
     } else {
-      camera.x = gameConfig?.WORLD_WIDTH / 2 || 1000;
-      camera.y = gameConfig?.WORLD_HEIGHT / 2 || 1000;
+      targetX = gameConfig?.WORLD_WIDTH / 2 || 1000;
+      targetY = gameConfig?.WORLD_HEIGHT / 2 || 1000;
+    }
+
+    // Calculate distance from camera to target
+    const dx = targetX - camera.x;
+    const dy = targetY - camera.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Only move camera if outside deadzone
+    if (distance > CAMERA_DEADZONE) {
+      // Smooth lerp toward target
+      const lerpFactor = Math.min(1, CAMERA_LERP_SPEED * dt);
+      camera.x += dx * lerpFactor;
+      camera.y += dy * lerpFactor;
     }
   } else if (player) {
     // Update camera to follow player
