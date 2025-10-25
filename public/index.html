@@ -69,6 +69,116 @@
                 <p>YOU DIED</p>
                 <span id="respawnTimer"></span>
             </div>
+
+            <!-- In-game menu (ESC to toggle) -->
+            <div id="gameMenu" class="game-menu" style="display: none">
+                <div class="game-menu-content">
+                    <h2>GAME MENU</h2>
+                    <div class="menu-hint">Press ESC to close</div>
+
+                    <div class="game-menu-section">
+                        <h3>Player Name</h3>
+                        <input
+                            type="text"
+                            id="playerNameInput"
+                            maxlength="20"
+                            placeholder="Enter your name"
+                        />
+                        <button id="saveNameButton" class="menu-btn">
+                            Save Name
+                        </button>
+                    </div>
+
+                    <div class="game-menu-section">
+                        <button id="spectateButton" class="menu-btn">
+                            Enter Spectate Mode
+                        </button>
+                    </div>
+
+                    <div class="game-menu-section">
+                        <button id="controlsButton" class="menu-btn">
+                            Controls & How to Play
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls/How to Play screen -->
+            <div id="controlsScreen" class="game-menu" style="display: none">
+                <div class="game-menu-content controls-screen">
+                    <h2>CONTROLS & HOW TO PLAY</h2>
+                    <div class="menu-hint">Press ESC to close</div>
+
+                    <div class="controls-grid">
+                        <div class="control-section">
+                            <h3>Movement</h3>
+                            <div class="control-item">
+                                <span class="key">W</span>
+                                <span>Move Up</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">A</span>
+                                <span>Move Left</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">S</span>
+                                <span>Move Down</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">D</span>
+                                <span>Move Right</span>
+                            </div>
+                        </div>
+
+                        <div class="control-section">
+                            <h3>Combat</h3>
+                            <div class="control-item">
+                                <span class="key">LEFT CLICK</span>
+                                <span>Shoot</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">MOUSE</span>
+                                <span>Aim Direction</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">R</span>
+                                <span>Reload Weapon</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">1-5</span>
+                                <span>Switch Weapons</span>
+                            </div>
+                        </div>
+
+                        <div class="control-section">
+                            <h3>General</h3>
+                            <div class="control-item">
+                                <span class="key">ESC</span>
+                                <span>Toggle Menu</span>
+                            </div>
+                            <div class="control-item">
+                                <span class="key">`</span>
+                                <span>Mod Editor</span>
+                            </div>
+                        </div>
+
+                        <div class="control-section full-width">
+                            <h3>Objective</h3>
+                            <p class="objective-text">
+                                Eliminate opponents to score kills. Collect
+                                health, armor, and ammo pickups scattered around
+                                the map. Different weapons have different ranges
+                                and damage values. Manage your ammo and reload
+                                strategically. Top the leaderboard!
+                            </p>
+                        </div>
+                    </div>
+
+                    <button id="closeControlsButton" class="menu-btn back-btn">
+                        Back to Menu
+                    </button>
+                </div>
+            </div>
         </div>
 
         <script src="/socket.io/socket.io.js"></script>
