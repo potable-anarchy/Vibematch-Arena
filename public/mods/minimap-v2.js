@@ -102,11 +102,6 @@ setTimeout(() => {
         }
       });
 
-      // Minimap label (inside the box)
-      ctx.fillStyle = "#66ccff";
-      ctx.font = "bold 10px monospace";
-      ctx.textAlign = "left";
-      ctx.fillText("MAP", x + 5, y + 12);
     },
   });
 
