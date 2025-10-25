@@ -108,6 +108,7 @@ const WEAPONS = {
     reload: 1.2,
     range: 800,
     bloom: 0.02,
+    projectileSpeed: 1200, // pixels per second
     // Bot tactical ranges
     optimalRange: { min: 100, max: 300 },
     minEngageRange: 50,
@@ -120,6 +121,7 @@ const WEAPONS = {
     reload: 1.8,
     range: 600,
     bloom: 0.05,
+    projectileSpeed: 1000, // pixels per second - slightly slower
     // Bot tactical ranges - close to medium, aggressive
     optimalRange: { min: 80, max: 250 },
     minEngageRange: 40,
@@ -133,6 +135,7 @@ const WEAPONS = {
     reload: 2.5,
     range: 300,
     spread: 0.12,
+    projectileSpeed: 800, // pixels per second - slower shotgun pellets
     // Bot tactical ranges - very aggressive close range
     optimalRange: { min: 50, max: 150 },
     minEngageRange: 20,
@@ -145,6 +148,7 @@ const WEAPONS = {
     reload: 1.7,
     range: 1200,
     bloom: 0.008,
+    projectileSpeed: 1500, // pixels per second - fastest bullets
     // Bot tactical ranges - medium to long range
     optimalRange: { min: 200, max: 450 },
     minEngageRange: 100,
@@ -990,7 +994,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Handle shooting
+// Handle shooting - creates projectiles instead of instant hitscan
 function handleShoot(player) {
   if (player.invulnerable > Date.now()) return;
   if (player.reloading) return;
@@ -1007,55 +1011,21 @@ function handleShoot(player) {
 
   // Handle different weapon types
   if (player.weapon === "shotgun") {
-    // Shotgun fires multiple pellets
+    // Shotgun fires multiple projectile pellets
     for (let i = 0; i < weapon.pellets; i++) {
       const spread = (Math.random() - 0.5) * weapon.spread * 2;
       const angle = player.aimAngle + spread;
-      const hit = raycast(player.x, player.y, angle, weapon.range, player.id);
 
-      if (hit && hit.player) {
-        const killed = damagePlayer(hit.player, weapon.damage, player.id);
-        io.emit("hit", {
-          shooterId: player.id,
-          targetId: hit.player.id,
-          damage: weapon.damage,
-          killed,
-        });
-      } else if (hit && hit.wall) {
-        // Bullet hit a wall - emit wall impact event
-        const impactX = player.x + Math.cos(angle) * hit.distance;
-        const impactY = player.y + Math.sin(angle) * hit.distance;
-        io.emit("wallImpact", {
-          x: impactX,
-          y: impactY,
-          angle: angle,
-        });
-      }
+      // Create projectile
+      createProjectile(player.x, player.y, angle, weapon, player.id);
     }
   } else {
-    // Hitscan weapons
+    // Other weapons fire single projectile
     const bloom = (Math.random() - 0.5) * weapon.bloom * 2;
     const angle = player.aimAngle + bloom;
-    const hit = raycast(player.x, player.y, angle, weapon.range, player.id);
 
-    if (hit && hit.player) {
-      const killed = damagePlayer(hit.player, weapon.damage, player.id);
-      io.emit("hit", {
-        shooterId: player.id,
-        targetId: hit.player.id,
-        damage: weapon.damage,
-        killed,
-      });
-    } else if (hit && hit.wall) {
-      // Bullet hit a wall - emit wall impact event
-      const impactX = player.x + Math.cos(angle) * hit.distance;
-      const impactY = player.y + Math.sin(angle) * hit.distance;
-      io.emit("wallImpact", {
-        x: impactX,
-        y: impactY,
-        angle: angle,
-      });
-    }
+    // Create projectile
+    createProjectile(player.x, player.y, angle, weapon, player.id);
   }
 
   io.emit("shoot", {
@@ -1068,6 +1038,25 @@ function handleShoot(player) {
 
   // Create gunshot sound event for bots to hear
   createSoundEvent(player.x, player.y, "gunshot", player.id);
+}
+
+// Create a projectile
+function createProjectile(x, y, angle, weapon, shooterId) {
+  const projectile = {
+    id: gameState.nextProjectileId++,
+    x,
+    y,
+    vx: Math.cos(angle) * weapon.projectileSpeed,
+    vy: Math.sin(angle) * weapon.projectileSpeed,
+    angle,
+    damage: weapon.damage,
+    shooterId,
+    weapon: weapon,
+    distanceTraveled: 0,
+    maxRange: weapon.range,
+  };
+
+  gameState.projectiles.push(projectile);
 }
 
 // Game loop
@@ -1084,6 +1073,140 @@ function gameLoop() {
 
     // Clean up expired sound events
     cleanupSoundEvents();
+
+    // Update projectiles
+    for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+      const proj = gameState.projectiles[i];
+
+      // Move projectile
+      const moveDistance = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy) * dt;
+      proj.x += proj.vx * dt;
+      proj.y += proj.vy * dt;
+      proj.distanceTraveled += moveDistance;
+
+      // Check if projectile exceeded max range
+      if (proj.distanceTraveled >= proj.maxRange) {
+        gameState.projectiles.splice(i, 1);
+        continue;
+      }
+
+      // Projectile radius for collision (small)
+      const PROJECTILE_RADIUS = 3;
+
+      let hitSomething = false;
+
+      // Check wall collisions
+      for (const wall of WALLS) {
+        if (
+          circleRectCollision(
+            proj.x,
+            proj.y,
+            PROJECTILE_RADIUS,
+            wall.x,
+            wall.y,
+            wall.width,
+            wall.height,
+          )
+        ) {
+          // Hit wall - create wall impact
+          io.emit("wallImpact", {
+            x: proj.x,
+            y: proj.y,
+            angle: proj.angle,
+          });
+          hitSomething = true;
+          break;
+        }
+      }
+
+      if (hitSomething) {
+        gameState.projectiles.splice(i, 1);
+        continue;
+      }
+
+      // Check crate collisions
+      for (const crate of CRATES) {
+        if (
+          circleRectCollision(
+            proj.x,
+            proj.y,
+            PROJECTILE_RADIUS,
+            crate.x,
+            crate.y,
+            crate.size,
+            crate.size,
+          )
+        ) {
+          // Hit crate - create wall impact
+          io.emit("wallImpact", {
+            x: proj.x,
+            y: proj.y,
+            angle: proj.angle,
+          });
+          hitSomething = true;
+          break;
+        }
+      }
+
+      if (hitSomething) {
+        gameState.projectiles.splice(i, 1);
+        continue;
+      }
+
+      // Check player collisions
+      for (const [id, player] of gameState.players) {
+        if (id === proj.shooterId || player.health <= 0) continue;
+
+        const dx = player.x - proj.x;
+        const dy = player.y - proj.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < GAME_CONFIG.PLAYER_RADIUS + PROJECTILE_RADIUS) {
+          // Hit player
+          const killed = damagePlayer(player, proj.damage, proj.shooterId);
+          io.emit("hit", {
+            shooterId: proj.shooterId,
+            targetId: player.id,
+            damage: proj.damage,
+            killed,
+          });
+          hitSomething = true;
+          break;
+        }
+      }
+
+      if (hitSomething) {
+        gameState.projectiles.splice(i, 1);
+        continue;
+      }
+
+      // Check bot collisions
+      for (const [id, bot] of gameState.bots) {
+        if (id === proj.shooterId || bot.health <= 0) continue;
+
+        const dx = bot.x - proj.x;
+        const dy = bot.y - proj.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < GAME_CONFIG.PLAYER_RADIUS + PROJECTILE_RADIUS) {
+          // Hit bot
+          const killed = damagePlayer(bot, proj.damage, proj.shooterId);
+          io.emit("hit", {
+            shooterId: proj.shooterId,
+            targetId: bot.id,
+            damage: proj.damage,
+            killed,
+          });
+          hitSomething = true;
+          break;
+        }
+      }
+
+      if (hitSomething) {
+        gameState.projectiles.splice(i, 1);
+        continue;
+      }
+    }
 
     // Update bots AI
     for (const [id, bot] of gameState.bots) {
@@ -1796,6 +1919,12 @@ function gameLoop() {
           y: p.y,
           type: p.type,
           active: p.active,
+        })),
+        projectiles: gameState.projectiles.map((p) => ({
+          id: p.id,
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+          angle: Math.round(p.angle * 100) / 100,
         })),
       };
 

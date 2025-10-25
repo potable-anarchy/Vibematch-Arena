@@ -185,10 +185,11 @@ let weapons = null;
 let gameState = {
   players: [],
   pickups: [],
+  projectiles: [],
 };
 
 // Interpolation for smooth movement
-let lastServerState = { players: [], pickups: [] };
+let lastServerState = { players: [], pickups: [], projectiles: [] };
 let serverStateTime = Date.now();
 const INTERPOLATION_TIME = 100; // ms - how long to interpolate
 
@@ -524,6 +525,7 @@ function getInterpolatedState() {
   return {
     players: interpolatedPlayers,
     pickups: gameState.pickups,
+    projectiles: gameState.projectiles,
   };
 }
 
@@ -534,7 +536,7 @@ socket.on("shoot", (data) => {
   const gunEndY = data.y + Math.sin(data.angle) * gunBarrelLength;
 
   createMuzzleFlash(gunEndX, gunEndY, data.angle);
-  createBulletTracer(gunEndX, gunEndY, data.angle, weapons[data.weapon].range);
+  // Projectiles are now rendered from server state instead of instant tracers
   modSystem.callHook("onShoot", data);
 });
 
@@ -676,17 +678,8 @@ function createMuzzleFlash(x, y, angle) {
   });
 }
 
-function createBulletTracer(x, y, angle, range) {
-  effects.push({
-    type: "tracer",
-    x,
-    y,
-    angle,
-    range,
-    life: 0.2,
-    maxLife: 0.2,
-  });
-}
+// Projectiles are now rendered directly from server state
+// No longer need instant tracer lines
 
 function createHitEffect(x, y) {
   // Add blood splat sprite effect
@@ -822,6 +815,9 @@ function render(dt) {
 
   // Draw particles (blood particles should be under players)
   drawParticles(dt);
+
+  // Draw projectiles
+  drawProjectiles();
 
   // Update and draw players (using interpolated positions)
   renderState.players.forEach((p) => {
@@ -1075,18 +1071,6 @@ function drawEffects(dt) {
       ctx.fill();
 
       ctx.restore();
-    } else if (effect.type === "tracer") {
-      const screenX = worldToScreenX(effect.x);
-      const screenY = worldToScreenY(effect.y);
-      const endX = screenX + Math.cos(effect.angle) * effect.range;
-      const endY = screenY + Math.sin(effect.angle) * effect.range;
-
-      ctx.strokeStyle = `rgba(255, 204, 0, ${alpha * 0.6})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(screenX, screenY);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
     } else if (effect.type === "bloodSplat") {
       const screenX = worldToScreenX(effect.x);
       const screenY = worldToScreenY(effect.y);
@@ -1132,6 +1116,37 @@ function drawParticles(dt) {
     ctx.fill();
 
     return true;
+  });
+}
+
+function drawProjectiles() {
+  if (!gameState.projectiles) return;
+
+  gameState.projectiles.forEach((projectile) => {
+    const screenX = worldToScreenX(projectile.x);
+    const screenY = worldToScreenY(projectile.y);
+
+    // Draw projectile as a small glowing circle
+    ctx.save();
+
+    // Glow effect
+    ctx.shadowColor = "#ffcc00";
+    ctx.shadowBlur = 8;
+
+    // Main projectile
+    ctx.fillStyle = "#ffff66";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner bright core
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
   });
 }
 
