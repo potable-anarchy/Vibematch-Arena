@@ -554,12 +554,12 @@ socket.on("shoot", (data) => {
 socket.on("hit", (data) => {
   const target = gameState.players.find((p) => p.id === data.targetId);
   if (target) {
-    createHitEffect(target.x, target.y);
+    createHitEffect(target.x, target.y, data.headshot);
     if (data.killed) {
-      showKillMessage(data.shooterId, data.targetId);
+      showKillMessage(data.shooterId, data.targetId, data.headshot);
       modSystem.callHook("onKill", data.shooterId, data.targetId);
     }
-    modSystem.callHook("onHit", data.shooterId, data.targetId, data.damage);
+    modSystem.callHook("onHit", data.shooterId, data.targetId, data.damage, data.headshot);
   }
 });
 
@@ -656,7 +656,7 @@ function updateScoreboard() {
 }
 
 // Show kill message
-function showKillMessage(killerId, victimId) {
+function showKillMessage(killerId, victimId, isHeadshot = false) {
   const killer = gameState.players.find((p) => p.id === killerId);
   const victim = gameState.players.find((p) => p.id === victimId);
 
@@ -664,7 +664,14 @@ function showKillMessage(killerId, victimId) {
 
   const message = document.createElement("div");
   message.className = "kill-message";
-  message.textContent = `${killer.name} killed ${victim.name}`;
+
+  // Add headshot indicator if it was a headshot
+  if (isHeadshot) {
+    message.textContent = `${killer.name} [HEADSHOT] ${victim.name}`;
+    message.style.color = "#ff0000"; // Red text for headshots
+  } else {
+    message.textContent = `${killer.name} killed ${victim.name}`;
+  }
 
   if (killerId === playerId) {
     message.style.borderColor = "#66ccff";
@@ -756,8 +763,8 @@ function createMuzzleFlash(x, y, angle) {
 // Projectiles are now rendered directly from server state
 // No longer need instant tracer lines
 
-function createHitEffect(x, y) {
-  // Add blood splat sprite effect
+function createHitEffect(x, y, isHeadshot = false) {
+  // Add blood splat sprite effect (larger for headshots)
   const bloodSprite = assets.get("blood_splat");
   if (bloodSprite && bloodSprite.complete) {
     effects.push({
@@ -765,16 +772,28 @@ function createHitEffect(x, y) {
       x,
       y,
       angle: Math.random() * Math.PI * 2,
-      scale: 0.3 + Math.random() * 0.3,
+      scale: isHeadshot ? 0.5 + Math.random() * 0.3 : 0.3 + Math.random() * 0.3,
       life: 2.0,
       maxLife: 2.0,
     });
   }
 
-  // Blood particles
-  for (let i = 0; i < 12; i++) {
-    const angle = (Math.PI * 2 * i) / 12 + Math.random() * 0.3;
-    const speed = 150 + Math.random() * 150;
+  // Headshot text effect
+  if (isHeadshot) {
+    effects.push({
+      type: "headshotText",
+      x,
+      y: y - 30, // Above the player
+      life: 1.0,
+      maxLife: 1.0,
+    });
+  }
+
+  // Blood particles (more for headshots)
+  const particleCount = isHeadshot ? 20 : 12;
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.3;
+    const speed = isHeadshot ? 200 + Math.random() * 200 : 150 + Math.random() * 150;
     particles.push({
       x,
       y,
@@ -782,8 +801,8 @@ function createHitEffect(x, y) {
       vy: Math.sin(angle) * speed,
       life: 0.8,
       maxLife: 0.8,
-      color: "#cc0000",
-      size: 2 + Math.random() * 3,
+      color: isHeadshot ? "#ff0000" : "#cc0000", // Brighter red for headshots
+      size: isHeadshot ? 3 + Math.random() * 4 : 2 + Math.random() * 3,
     });
   }
 }
@@ -1180,6 +1199,28 @@ function drawEffects(dt) {
         ctx.globalAlpha = 1;
         ctx.restore();
       }
+    } else if (effect.type === "headshotText") {
+      const screenX = worldToScreenX(effect.x);
+      const screenY = worldToScreenY(effect.y);
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      // Draw "HEADSHOT!" text
+      ctx.font = "bold 20px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Text shadow for visibility
+      ctx.shadowColor = "#000000";
+      ctx.shadowBlur = 8;
+
+      // Bright red text
+      ctx.fillStyle = "#ff0000";
+      ctx.fillText("HEADSHOT!", screenX, screenY);
+
+      ctx.globalAlpha = 1;
+      ctx.restore();
     }
 
     return true;
