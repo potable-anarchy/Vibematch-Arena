@@ -403,7 +403,7 @@ body {
 /* Spectator Overlay */
 .spectator-overlay {
     position: fixed;
-    top: 80px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 500;
@@ -414,8 +414,8 @@ body {
     background: linear-gradient(135deg, #ff3366, #ff6699);
     color: #fff;
     border: 3px solid #fff;
-    padding: 20px 60px;
-    font-size: 32px;
+    padding: 5px 15px;
+    font-size: 8px;
     font-weight: bold;
     font-family: "Courier New", monospace;
     cursor: pointer;
