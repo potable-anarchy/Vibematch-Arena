@@ -267,37 +267,3 @@ registerHook("onPickup", (playerId, pickup) => {
     }
   }
 });
-
-// Register weapon pickup counter with HUD Layout Manager
-setTimeout(() => {
-  if (!window.HUDLayoutManager) {
-    console.error(
-      "❌ HUD Layout Manager not found! Load hud-layout-manager.js first",
-    );
-    return;
-  }
-
-  window.HUDLayoutManager.register("weapon-pickup-counter", {
-    position: "SW",
-    priority: 20,
-    width: 180,
-    height: 18,
-    render: (ctx, x, y) => {
-      const activeWeapons = weaponPickups.filter((w) => w.active).length;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-      ctx.font = "12px monospace";
-      ctx.textAlign = "left";
-      ctx.fillText(
-        `Weapons: ${activeWeapons}/${weaponPickups.length}`,
-        x,
-        y + 12,
-      );
-    },
-  });
-
-  console.log(
-    "✅ Weapon Pickups v2 loaded -",
-    weaponPickups.length,
-    "weapons on map (using Layout Manager)",
-  );
-}, 200);
