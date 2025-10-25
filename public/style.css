@@ -630,3 +630,47 @@ body {
     background: #99ddff;
     box-shadow: 0 0 20px rgba(102, 204, 255, 0.6);
 }
+
+/* Menu Tabs */
+.menu-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid rgba(102, 204, 255, 0.3);
+}
+
+.menu-tab {
+    flex: 1;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    background: rgba(10, 10, 20, 0.5);
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #66ccff;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.menu-tab:hover {
+    background: rgba(102, 204, 255, 0.1);
+    color: #99ddff;
+}
+
+.menu-tab.active {
+    background: rgba(102, 204, 255, 0.2);
+    border-bottom-color: #ff3366;
+    color: #ff3366;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
