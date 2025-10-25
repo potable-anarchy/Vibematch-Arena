@@ -21,6 +21,9 @@ db.exec(`
     user_prompt TEXT,
     created_at INTEGER NOT NULL,
     player_id TEXT,
+    failed INTEGER DEFAULT 0,
+    error_message TEXT,
+    retry_count INTEGER DEFAULT 0,
     UNIQUE(name, player_id)
   )
 `);
@@ -176,6 +179,32 @@ export function removePlayerActiveMods(playerId) {
   return stmt.run(playerId);
 }
 
+// Save a failed mod generation attempt
+export function saveFailedMod(userPrompt, errorMessage, retryCount = 0, playerId = null) {
+  const stmt = db.prepare(`
+    INSERT INTO mods (name, code, type, user_prompt, created_at, player_id, failed, error_message, retry_count)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `);
+
+  const modName = `failed_${Date.now()}`;
+  const result = stmt.run(modName, '', 'client', userPrompt, Date.now(), playerId, errorMessage, retryCount);
+
+  console.log(`❌ Logged failed mod generation: ${errorMessage} (retry: ${retryCount})`);
+  return result.lastInsertRowid;
+}
+
+// Get a random working mod from the database
+export function getRandomWorkingMod() {
+  const stmt = db.prepare(`
+    SELECT * FROM mods
+    WHERE failed = 0 AND code != ''
+    ORDER BY RANDOM()
+    LIMIT 1
+  `);
+
+  return stmt.get();
+}
+
 export default {
   saveMod,
   getModsByPlayer,
@@ -187,4 +216,6 @@ export default {
   getActiveMods,
   cleanupExpiredMods,
   removePlayerActiveMods,
+  saveFailedMod,
+  getRandomWorkingMod,
 };

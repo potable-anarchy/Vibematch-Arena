@@ -13,6 +13,8 @@ import {
   getActiveMods,
   cleanupExpiredMods,
   removePlayerActiveMods,
+  saveFailedMod,
+  getRandomWorkingMod,
 } from "./mod-database.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -461,7 +463,141 @@ app.get("/api/test-gemini", async (req, res) => {
   }
 });
 
-// Gemini API proxy endpoint for mod code generation
+// Helper function to attempt mod generation with specified backfire chance
+async function attemptModGeneration(prompt, backfireChance, apiKey) {
+  const geminiEndpoint =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  const systemPrompt = buildSystemPrompt();
+
+  const shouldBackfire = Math.random() < backfireChance;
+
+  const backfireInstruction = shouldBackfire
+    ? `
+
+🎲 SPECIAL INSTRUCTION: Generate a BACKFIRE mod!
+Make it spectacularly backfire in a funny way:
+- REVERSE: Help everyone EXCEPT the requester
+- OPPOSITE: Do the opposite of what they asked
+- CHAOTIC: Add annoying random effects
+- SABOTAGE: Actively hurt them
+
+Remember to start with "// BACKFIRE" on line 1!
+`
+    : "";
+
+  const fullPrompt = `${systemPrompt}${backfireInstruction}\n\nUser Request:\n${prompt}`;
+
+  const response = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: fullPrompt,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Gemini API error:", response.status, errorText);
+
+    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  // Check if content was blocked by safety filters
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Content blocked: ${data.promptFeedback.blockReason}`);
+  }
+
+  // Validate response structure
+  if (
+    !data.candidates ||
+    !data.candidates[0] ||
+    !data.candidates[0].content ||
+    !data.candidates[0].content.parts ||
+    !data.candidates[0].content.parts[0] ||
+    !data.candidates[0].content.parts[0].text
+  ) {
+    console.error("Invalid Gemini API response structure:", data);
+    throw new Error("AI generation failed - no code generated");
+  }
+
+  const generatedText = data.candidates[0].content.parts[0].text;
+
+  // Extract code from markdown blocks if present
+  const codeBlockMatch = generatedText.match(
+    /```(?:javascript|js)?\s*([\s\S]*?)```/,
+  );
+  const code = codeBlockMatch
+    ? codeBlockMatch[1].trim()
+    : generatedText.trim();
+
+  // Detect backfire and mod type from the first lines
+  let modType = "client"; // default to client
+  let isBackfire = false;
+  const lines = code.split("\n");
+  const firstLine = lines[0].trim().toLowerCase();
+  const secondLine = lines.length > 1 ? lines[1].trim().toLowerCase() : "";
+
+  // Check if it's a backfire mod
+  if (firstLine.includes("// backfire")) {
+    isBackfire = true;
+    console.log("🎲 BACKFIRE mod generated!");
+
+    // Type is on the second line for backfire mods
+    if (secondLine.includes("// server")) {
+      modType = "server";
+    } else if (secondLine.includes("// client")) {
+      modType = "client";
+    } else if (secondLine.includes("// persistent")) {
+      modType = "persistent";
+    }
+  } else {
+    // Normal mod - type is on first line
+    if (firstLine.includes("// server")) {
+      modType = "server";
+    } else if (firstLine.includes("// client")) {
+      modType = "client";
+    } else if (firstLine.includes("// persistent")) {
+      modType = "persistent";
+    }
+  }
+
+  // Validate generated code for syntax errors
+  try {
+    if (modType === "client") {
+      // Client mods run directly
+      new Function(code);
+    } else if (modType === "server" || modType === "persistent") {
+      // Server/persistent mods get an 'api' parameter
+      new Function("api", code);
+    }
+  } catch (syntaxError) {
+    console.error("Generated code has syntax errors:", syntaxError);
+    console.error("Code:", code);
+    throw new Error(`Generated code has syntax errors: ${syntaxError.message}`);
+  }
+
+  return { code, type: modType, backfire: isBackfire };
+}
+
+// Gemini API proxy endpoint for mod code generation with retry and fallback
 app.post("/api/generate-mod", async (req, res) => {
   const requestId = `${Date.now()}-${Math.random()}`;
   performanceMonitor.startRequest(requestId, "/api/generate-mod");
@@ -487,197 +623,106 @@ app.post("/api/generate-mod", async (req, res) => {
       });
     }
 
-    // Call Gemini API - using gemini-2.5-flash which is available with your key
-    const geminiEndpoint =
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-    const systemPrompt = buildSystemPrompt();
-
     // 10% chance to request a backfire mod!
     const BACKFIRE_CHANCE = 0.1;
-    const shouldBackfire = Math.random() < BACKFIRE_CHANCE;
+    let currentBackfireChance = BACKFIRE_CHANCE;
+    let attempt = 1;
+    let lastError = null;
+    let result = null;
 
-    const backfireInstruction = shouldBackfire
-      ? `
-
-🎲 SPECIAL INSTRUCTION: Generate a BACKFIRE mod!
-Make it spectacularly backfire in a funny way:
-- REVERSE: Help everyone EXCEPT the requester
-- OPPOSITE: Do the opposite of what they asked
-- CHAOTIC: Add annoying random effects
-- SABOTAGE: Actively hurt them
-
-Remember to start with "// BACKFIRE" on line 1!
-`
-      : "";
-
-    const fullPrompt = `${systemPrompt}${backfireInstruction}\n\nUser Request:\n${prompt}`;
-
-    const response = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: fullPrompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 2048,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API error:", response.status, errorText);
-      console.error(
-        "Endpoint used:",
-        `${geminiEndpoint}?key=${apiKey.substring(0, 8)}...`,
-      );
-
-      // More specific error messages
-      if (response.status === 404) {
-        performanceMonitor.endRequest(requestId, true);
-        return res.status(404).json({
-          error: `Gemini API model not found. Check if gemini-1.5-flash is available in your region or API key permissions.`,
-        });
-      }
-
-      performanceMonitor.endRequest(requestId, true);
-      return res.status(response.status).json({
-        error: `Gemini API error: ${response.statusText}`,
-      });
-    }
-
-    const data = await response.json();
-
-    // Check if content was blocked by safety filters
-    if (data.promptFeedback?.blockReason) {
-      performanceMonitor.endRequest(requestId, true);
-      return res.status(400).json({
-        error: "Content blocked",
-        reason: data.promptFeedback.blockReason,
-        userMessage:
-          "Your request was blocked by content filters. Try rephrasing your request in a different way.",
-        canRetry: true,
-      });
-    }
-
-    // Validate response structure
-    if (
-      !data.candidates ||
-      !data.candidates[0] ||
-      !data.candidates[0].content ||
-      !data.candidates[0].content.parts ||
-      !data.candidates[0].content.parts[0] ||
-      !data.candidates[0].content.parts[0].text
-    ) {
-      console.error("Invalid Gemini API response structure:", data);
-      performanceMonitor.endRequest(requestId, true);
-      return res.status(500).json({
-        error: "AI generation failed",
-        reason: "No code generated",
-        userMessage:
-          "The AI couldn't generate code for this request. Please try a different prompt or simplify your request.",
-        canRetry: true,
-      });
-    }
-
-    const generatedText = data.candidates[0].content.parts[0].text;
-
-    // Extract code from markdown blocks if present
-    const codeBlockMatch = generatedText.match(
-      /```(?:javascript|js)?\s*([\s\S]*?)```/,
-    );
-    const code = codeBlockMatch
-      ? codeBlockMatch[1].trim()
-      : generatedText.trim();
-
-    // Detect backfire and mod type from the first lines
-    let modType = "client"; // default to client
-    let isBackfire = false;
-    const lines = code.split("\n");
-    const firstLine = lines[0].trim().toLowerCase();
-    const secondLine = lines.length > 1 ? lines[1].trim().toLowerCase() : "";
-
-    // Check if it's a backfire mod
-    if (firstLine.includes("// backfire")) {
-      isBackfire = true;
-      console.log("🎲 BACKFIRE mod generated!");
-
-      // Type is on the second line for backfire mods
-      if (secondLine.includes("// server")) {
-        modType = "server";
-      } else if (secondLine.includes("// client")) {
-        modType = "client";
-      } else if (secondLine.includes("// persistent")) {
-        modType = "persistent";
-      }
-    } else {
-      // Normal mod - type is on first line
-      if (firstLine.includes("// server")) {
-        modType = "server";
-      } else if (firstLine.includes("// client")) {
-        modType = "client";
-      } else if (firstLine.includes("// persistent")) {
-        modType = "persistent";
-      }
-    }
-
-    // Validate generated code for syntax errors
+    // First attempt
     try {
-      if (modType === "client") {
-        // Client mods run directly
-        new Function(code);
-      } else if (modType === "server" || modType === "persistent") {
-        // Server/persistent mods get an 'api' parameter
-        new Function("api", code);
+      console.log(`🎲 Mod generation attempt ${attempt} (backfire chance: ${currentBackfireChance * 100}%)`);
+      result = await attemptModGeneration(prompt, currentBackfireChance, apiKey);
+    } catch (error) {
+      lastError = error.message;
+      console.error(`❌ Attempt ${attempt} failed:`, lastError);
+
+      // Log first failure
+      try {
+        saveFailedMod(prompt, lastError, attempt, null);
+      } catch (dbError) {
+        console.error("Failed to save failed mod to database:", dbError);
       }
-    } catch (syntaxError) {
-      console.error("Generated code has syntax errors:", syntaxError);
-      console.error("Code:", code);
-      performanceMonitor.endRequest(requestId, true);
-      return res.status(500).json({
-        error: "Generated code has syntax errors",
-        reason: syntaxError.message,
-        userMessage:
-          "The AI generated code with errors. Please try again or rephrase your request.",
-        canRetry: true,
-      });
+
+      // Second attempt with doubled backfire chance
+      attempt = 2;
+      currentBackfireChance = BACKFIRE_CHANCE * 2;
+      console.log(`🔄 Retrying mod generation (attempt ${attempt}, backfire chance: ${currentBackfireChance * 100}%)`);
+
+      try {
+        result = await attemptModGeneration(prompt, currentBackfireChance, apiKey);
+      } catch (error2) {
+        lastError = error2.message;
+        console.error(`❌ Attempt ${attempt} failed:`, lastError);
+
+        // Log second failure
+        try {
+          saveFailedMod(prompt, lastError, attempt, null);
+        } catch (dbError) {
+          console.error("Failed to save failed mod to database:", dbError);
+        }
+
+        // Both attempts failed - fallback to random working mod
+        console.log("🎰 Both attempts failed, picking random working mod from database...");
+        const randomMod = getRandomWorkingMod();
+
+        if (randomMod) {
+          console.log(`✅ Using existing mod: ${randomMod.name} (type: ${randomMod.type})`);
+          result = {
+            code: randomMod.code,
+            type: randomMod.type,
+            backfire: false,
+            fallback: true,
+            fallbackMessage: "⚠️ Generation failed - using a random existing mod instead!"
+          };
+        } else {
+          // No working mods in database - final failure
+          performanceMonitor.endRequest(requestId, true);
+          return res.status(500).json({
+            error: "Failed to generate mod",
+            reason: lastError,
+            userMessage:
+              "The AI couldn't generate code and no fallback mods are available. Please try again.",
+            canRetry: true,
+          });
+        }
+      }
     }
 
-    // Save to database for tracking
-    try {
-      // Generate a unique name based on timestamp
-      const modName = `generated_${Date.now()}`;
-      saveMod(modName, code, modType, prompt, null);
-    } catch (dbError) {
-      console.error("Failed to save mod to database:", dbError);
-      // Don't fail the request if database save fails
+    // Save successful generation to database
+    if (result && !result.fallback) {
+      try {
+        const modName = `generated_${Date.now()}`;
+        saveMod(modName, result.code, result.type, prompt, null);
+      } catch (dbError) {
+        console.error("Failed to save mod to database:", dbError);
+        // Don't fail the request if database save fails
+      }
     }
 
     performanceMonitor.endRequest(requestId);
 
-    // Include backfire info in response
+    // Build response
     const apiResponse = {
-      code,
-      type: modType,
-      backfire: isBackfire,
+      code: result.code,
+      type: result.type,
+      backfire: result.backfire,
     };
 
-    if (isBackfire) {
+    if (result.backfire) {
       apiResponse.backfireMessage =
         "⚠️ Your mod BACKFIRED! Something went terribly wrong...";
-      console.log(`🎲 Sending backfire mod to user: ${modType}`);
+      console.log(`🎲 Sending backfire mod to user: ${result.type}`);
+    }
+
+    if (result.fallback) {
+      apiResponse.fallback = true;
+      apiResponse.fallbackMessage = result.fallbackMessage;
+    }
+
+    if (attempt > 1 && !result.fallback) {
+      apiResponse.retryMessage = `✅ Generation succeeded on attempt ${attempt}`;
     }
 
     res.json(apiResponse);
