@@ -523,6 +523,10 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: {
+                        duration: 750,
+                        easing: "easeInOutQuart",
+                    },
                     plugins: {
                         legend: {
                             display: false,
@@ -666,6 +670,10 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        animation: {
+                            duration: 750,
+                            easing: "easeInOutQuart",
+                        },
                         interaction: {
                             mode: "index",
                             intersect: false,
@@ -1074,12 +1082,12 @@
                 // Filter out old data points based on time window
                 filterOldDataPoints();
 
-                // Update all charts
-                tickChart.update("none");
-                memoryChart.update("none");
-                playerChart.update("none");
-                ticksChart.update("none");
-                gameStatsChart.update("none");
+                // Update all charts with smooth animation
+                tickChart.update("active");
+                memoryChart.update("active");
+                playerChart.update("active");
+                ticksChart.update("active");
+                gameStatsChart.update("active");
 
                 // Update API endpoint table
                 const tbody = document.getElementById("endpoint-tbody");
