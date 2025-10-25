@@ -151,6 +151,15 @@ There are THREE types of mods:
 2. SERVER MODS (one-time server actions)
 3. PERSISTENT MODS (continuous server effects)
 
+SPECTATOR CONTEXT:
+- Users can be either ACTIVE PLAYERS (in the game) or SPECTATORS (watching)
+- Spectators are NOT in the active game and should NOT be targeted by gameplay mods
+- Server and Persistent mods have access to api.isSpectator boolean flag
+- When generating server mods that affect "me" or "I":
+  * Check api.isSpectator to determine if user is spectating
+  * If spectator, either warn them or affect all players instead
+  * Spectator-safe mods: spawning items, affecting all players, game-wide effects
+
 ═══════════════════════════════════════════════════════════════
 1. CLIENT MODS
 ═══════════════════════════════════════════════════════════════
@@ -189,6 +198,7 @@ Use for: Instant teleport, one-time heal, spawn items, kill commands
 
 API (via api.methodName()):
 - api.myId - Your socket ID
+- api.isSpectator - Boolean: true if spectating, false if actively playing
 - api.setHealth(playerId, health) - Set health (0-100)
 - api.setArmor(playerId, armor) - Set armor (0-100)
 - api.teleportPlayer(playerId, x, y) - Teleport instantly
@@ -210,6 +220,18 @@ api.setArmor(api.myId, 100);
 api.broadcast("Player teleported to center!");
 \`\`\`
 
+Example with spectator check:
+\`\`\`javascript
+// SERVER
+// Spawn health pickups (spectator-safe)
+if (api.isSpectator) {
+  api.log("Spectator spawning health pickups");
+}
+const positions = [{x:100,y:100},{x:500,y:300},{x:800,y:600}];
+positions.forEach(pos => api.spawnPickup(pos.x, pos.y, "health"));
+api.broadcast("Health pickups spawned!");
+\`\`\`
+
 ═══════════════════════════════════════════════════════════════
 3. PERSISTENT MODS ⚡ (Continuous Effects)
 ═══════════════════════════════════════════════════════════════
@@ -219,6 +241,7 @@ RUNS EVERY GAME TICK (60 times/second) until expiration!
 API (via api.methodName()):
 - api.getMyPlayer() - Get player object who activated mod
 - api.getPlayer(playerId) - Get any player by ID
+- api.isSpectator - Boolean: true if spectating, false if active player
 - api.setHealth(playerId, health) - Set health (0-100)
 - api.setArmor(playerId, armor) - Set armor (0-100)
 - api.setInvulnerable(playerId, true/false) - Toggle invulnerability
@@ -1756,13 +1779,13 @@ io.on("connection", (socket) => {
       const { code, name } = data;
       const playerId = socket.id;
       const player = gameState.players.get(playerId);
+      const isSpectator = !player;
 
-      if (!player) {
-        socket.emit("serverModResult", { error: "Player not found" });
-        return;
+      if (isSpectator) {
+        console.log(`👻 Spectator ${socket.id} executing server mod: ${name || 'unnamed'}`);
+      } else {
+        console.log(`🔧 Executing server mod for ${player.name}`);
       }
-
-      console.log(`🔧 Executing server mod for ${player.name}`);
 
       // Save server mod to database
       try {
@@ -1777,6 +1800,9 @@ io.on("connection", (socket) => {
       const serverModAPI = {
         // Current player ID (the one executing the mod)
         myId: playerId,
+
+        // Spectator status - true if the user is spectating, false if actively playing
+        isSpectator: isSpectator,
 
         // Game state access (read-only references)
         getGameState: () => ({
@@ -1896,7 +1922,11 @@ io.on("connection", (socket) => {
           result !== undefined ? String(result) : "Mod executed successfully",
       });
 
-      console.log(`✅ Server mod executed successfully for ${player.name}`);
+      if (isSpectator) {
+        console.log(`✅ Server mod executed successfully for spectator ${socket.id}`);
+      } else {
+        console.log(`✅ Server mod executed successfully for ${player.name}`);
+      }
     } catch (error) {
       console.error("❌ Error executing server mod:", error);
       socket.emit("serverModResult", {
@@ -1926,19 +1956,21 @@ io.on("connection", (socket) => {
       const { code, durationMs, name, description } = data;
       const playerId = socket.id;
       const player = gameState.players.get(playerId);
-
-      if (!player) {
-        socket.emit("persistentModResult", { error: "Player not found" });
-        return;
-      }
+      const isSpectator = !player;
 
       // Validate duration (max 5 minutes = 300000ms)
       const maxDuration = 300000;
       const duration = Math.min(durationMs || 60000, maxDuration);
 
-      console.log(
-        `⚡ Activating persistent mod for ${player.name} (${duration / 1000}s)`,
-      );
+      if (isSpectator) {
+        console.log(
+          `👻 Activating persistent mod for spectator ${socket.id} (${duration / 1000}s)`,
+        );
+      } else {
+        console.log(
+          `⚡ Activating persistent mod for ${player.name} (${duration / 1000}s)`,
+        );
+      }
 
       // Add to active mods database
       const modId = addActiveMod(
@@ -1956,9 +1988,15 @@ io.on("connection", (socket) => {
         message: `Persistent mod activated for ${duration / 1000} seconds`,
       });
 
-      console.log(
-        `✅ Persistent mod ${modId} activated for ${player.name}, expires in ${duration / 1000}s`,
-      );
+      if (isSpectator) {
+        console.log(
+          `✅ Persistent mod ${modId} activated for spectator ${socket.id}, expires in ${duration / 1000}s`,
+        );
+      } else {
+        console.log(
+          `✅ Persistent mod ${modId} activated for ${player.name}, expires in ${duration / 1000}s`,
+        );
+      }
     } catch (error) {
       console.error("❌ Error activating persistent mod:", error);
       socket.emit("persistentModResult", {
