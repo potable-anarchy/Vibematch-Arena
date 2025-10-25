@@ -340,6 +340,11 @@ socket.on("state", (state) => {
 
 // Get interpolated game state for smooth rendering
 function getInterpolatedState() {
+  // Safety check: return raw state if no interpolation data
+  if (!gameState.players || !lastServerState.players) {
+    return gameState;
+  }
+
   const now = Date.now();
   const timeSinceUpdate = now - serverStateTime;
   const t = Math.min(1, timeSinceUpdate / INTERPOLATION_TIME); // 0 to 1
