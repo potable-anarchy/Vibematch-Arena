@@ -2088,6 +2088,11 @@ function gameLoop() {
         moved = true;
       }
 
+      // End spawn protection when bot moves
+      if (moved && bot.invulnerable > now) {
+        bot.invulnerable = 0;
+      }
+
       // Wall sliding behavior - if we hit on one axis but not the other, keep sliding
       if (hitX && !hitY) {
         // Hit wall on X, but can slide along Y
