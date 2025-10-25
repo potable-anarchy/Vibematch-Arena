@@ -1045,17 +1045,19 @@ function drawPlayer(p) {
     const scaledWidth = sprite.width * scale;
     const scaledHeight = sprite.height * scale;
 
-    // Draw invulnerability effect
+    // Draw invulnerability effect - pulsing circle
     if (p.invulnerable) {
+      // Calculate pulsing size (between 0.9 and 1.1)
+      const pulse = Math.sin(Date.now() / 150) * 0.1 + 1.0;
+      const baseRadius = Math.max(scaledWidth, scaledHeight) / 2 + 10;
+      const radius = baseRadius * pulse;
+
       ctx.strokeStyle = "#ffff00";
       ctx.lineWidth = 3;
       ctx.setLineDash([5, 5]);
-      ctx.strokeRect(
-        -scaledWidth / 2 - 5,
-        -scaledHeight / 2 - 5,
-        scaledWidth + 10,
-        scaledHeight + 10,
-      );
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.setLineDash([]);
     }
 

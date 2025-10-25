@@ -290,7 +290,7 @@ const GAME_CONFIG = {
   PLAYER_MAX_HEALTH: 100,
   PLAYER_START_ARMOR: 0,
   RESPAWN_DELAY: 1500, // ms
-  SPAWN_INVULN_TIME: 2000, // ms
+  SPAWN_INVULN_TIME: 10000, // ms
   SCORE_LIMIT: 15, // Round ends when a player reaches this kill count
 };
 
@@ -1174,6 +1174,11 @@ io.on("connection", (socket) => {
       const moveY = (input.down ? 1 : 0) - (input.up ? 1 : 0);
 
       if (moveX !== 0 || moveY !== 0) {
+        // End spawn protection when moving
+        if (player.invulnerable > Date.now()) {
+          player.invulnerable = 0;
+        }
+
         const mag = Math.sqrt(moveX * moveX + moveY * moveY);
         player.vx = (moveX / mag) * GAME_CONFIG.PLAYER_SPEED;
         player.vy = (moveY / mag) * GAME_CONFIG.PLAYER_SPEED;
@@ -1391,7 +1396,11 @@ io.on("connection", (socket) => {
 
 // Handle shooting - creates projectiles instead of instant hitscan
 function handleShoot(player) {
-  if (player.invulnerable > Date.now()) return;
+  // End spawn protection when shooting
+  if (player.invulnerable > Date.now()) {
+    player.invulnerable = 0;
+  }
+
   if (player.reloading) return;
   if (player.ammo <= 0) return;
 
