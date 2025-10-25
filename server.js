@@ -801,6 +801,72 @@ function hasLineOfSight(x1, y1, x2, y2) {
   return true; // Clear line of sight
 }
 
+// Check if target is behind exactly one wall (for rifle wall penetration)
+// Returns { canShootThrough: true, target, distance } if viable, null otherwise
+function canShootThroughWall(botX, botY, targetX, targetY, maxRange) {
+  const dx = targetX - botX;
+  const dy = targetY - botY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance < 1 || distance > maxRange) return null;
+
+  const angle = Math.atan2(dy, dx);
+  const rayDx = Math.cos(angle);
+  const rayDy = Math.sin(angle);
+
+  let wallCount = 0;
+  let closestWallDist = Infinity;
+
+  // Count walls blocking line of sight
+  for (const wall of WALLS) {
+    const dist = rayRectIntersection(
+      botX,
+      botY,
+      rayDx,
+      rayDy,
+      distance,
+      wall.x,
+      wall.y,
+      wall.width,
+      wall.height,
+    );
+    if (dist !== null && dist < distance) {
+      wallCount++;
+      closestWallDist = Math.min(closestWallDist, dist);
+      if (wallCount > 1) return null; // More than one wall - can't penetrate
+    }
+  }
+
+  // Check crates - treat them as un-penetrable
+  for (const crate of CRATES) {
+    const dist = rayRectIntersection(
+      botX,
+      botY,
+      rayDx,
+      rayDy,
+      distance,
+      crate.x,
+      crate.y,
+      crate.size,
+      crate.size,
+    );
+    if (dist !== null && dist < distance) {
+      return null; // Crate blocks - can't penetrate crates
+    }
+  }
+
+  // Exactly one wall blocking? That's shootable with rifle!
+  if (wallCount === 1) {
+    return {
+      canShootThrough: true,
+      distance: distance,
+      wallDistance: closestWallDist,
+    };
+  }
+
+  return null; // No walls or too many walls
+}
+
 // Create a sound event that bots can hear
 function createSoundEvent(x, y, type, sourceId) {
   const now = Date.now();
@@ -1837,6 +1903,11 @@ function gameLoop() {
         let nearestDist = Infinity;
         const VISION_RANGE = 900; // Increased from 600 for more action
 
+        // Also track nearest target behind wall (for rifle wall penetration)
+        let nearestBehindWall = null;
+        let nearestBehindWallDist = Infinity;
+        let wallPenetrationInfo = null;
+
         // Check human players - only if bot can see them
         for (const player of gameState.players.values()) {
           if (player.health <= 0) continue;
@@ -1844,7 +1915,7 @@ function gameLoop() {
           const dy = player.y - bot.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
 
-          // Only consider targets within vision range AND with clear line of sight
+          // Check if visible
           if (
             dist < VISION_RANGE &&
             hasLineOfSight(bot.x, bot.y, player.x, player.y)
@@ -1852,6 +1923,21 @@ function gameLoop() {
             if (dist < nearestDist) {
               nearestDist = dist;
               nearestTarget = player;
+            }
+          }
+          // Check if behind single wall (for rifle penetration)
+          else if (dist < VISION_RANGE && bot.weapon === "rifle") {
+            const penetrationCheck = canShootThroughWall(
+              bot.x,
+              bot.y,
+              player.x,
+              player.y,
+              VISION_RANGE,
+            );
+            if (penetrationCheck && dist < nearestBehindWallDist) {
+              nearestBehindWallDist = dist;
+              nearestBehindWall = player;
+              wallPenetrationInfo = penetrationCheck;
             }
           }
         }
@@ -1863,7 +1949,7 @@ function gameLoop() {
           const dy = otherBot.y - bot.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
 
-          // Only consider targets within vision range AND with clear line of sight
+          // Check if visible
           if (
             dist < VISION_RANGE &&
             hasLineOfSight(bot.x, bot.y, otherBot.x, otherBot.y)
@@ -1871,6 +1957,21 @@ function gameLoop() {
             if (dist < nearestDist) {
               nearestDist = dist;
               nearestTarget = otherBot;
+            }
+          }
+          // Check if behind single wall (for rifle penetration)
+          else if (dist < VISION_RANGE && bot.weapon === "rifle") {
+            const penetrationCheck = canShootThroughWall(
+              bot.x,
+              bot.y,
+              otherBot.x,
+              otherBot.y,
+              VISION_RANGE,
+            );
+            if (penetrationCheck && dist < nearestBehindWallDist) {
+              nearestBehindWallDist = dist;
+              nearestBehindWall = otherBot;
+              wallPenetrationInfo = penetrationCheck;
             }
           }
         }
@@ -1881,6 +1982,14 @@ function gameLoop() {
             x: nearestTarget.x,
             y: nearestTarget.y,
             time: now,
+          };
+        } else if (nearestBehindWall) {
+          // Also remember enemies behind walls
+          bot.lastKnownEnemy = {
+            x: nearestBehindWall.x,
+            y: nearestBehindWall.y,
+            time: now,
+            behindWall: true,
           };
         }
 
@@ -2008,6 +2117,53 @@ function gameLoop() {
             }
           }
         }
+        // BEHAVIOR: Rifle wall penetration - shoot through walls!
+        else if (
+          nearestBehindWall &&
+          bot.weapon === "rifle" &&
+          wallPenetrationInfo
+        ) {
+          // We have a rifle and detected an enemy behind exactly one wall
+          const dx = nearestBehindWall.x - bot.x;
+          const dy = nearestBehindWall.y - bot.y;
+          const angleToTarget = Math.atan2(dy, dx);
+          bot.aimAngle = angleToTarget;
+
+          // Get weapon data for range checks
+          const weaponData = WEAPONS[bot.weapon];
+          const minRange = weaponData.minEngageRange;
+
+          // Tactical movement - strafe while maintaining aim through wall
+          if (nearestBehindWallDist > weaponData.optimalRange.max) {
+            // Move closer to optimal range
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.7;
+            bot.vx = Math.cos(angleToTarget) * moveSpeed;
+            bot.vy = Math.sin(angleToTarget) * moveSpeed;
+          } else if (nearestBehindWallDist < minRange) {
+            // Too close - back away
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.6;
+            bot.vx = -Math.cos(angleToTarget) * moveSpeed;
+            bot.vy = -Math.sin(angleToTarget) * moveSpeed;
+          } else {
+            // In good range - strafe perpendicular to maintain position
+            const strafeAngle = angleToTarget + Math.PI / 2;
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.4;
+            bot.vx = Math.cos(strafeAngle) * moveSpeed * bot.strafeDir;
+            bot.vy = Math.sin(strafeAngle) * moveSpeed * bot.strafeDir;
+          }
+
+          // Shoot through wall - high probability when in good range
+          // Bot knows there's only one wall and rifle can penetrate
+          const wallShootChance = isAggressive ? 0.85 : 0.7;
+          if (
+            nearestBehindWallDist >= minRange &&
+            nearestBehindWallDist <= weaponData.maxEngageRange &&
+            Math.random() < wallShootChance
+          ) {
+            // Shoot through the wall!
+            handleShoot(bot);
+          }
+        }
         // BEHAVIOR: Hunt last known enemy position
         else if (bot.lastKnownEnemy && now - bot.lastKnownEnemy.time < 8000) {
           // Hunt toward last known position for 8 seconds
@@ -2022,6 +2178,26 @@ function gameLoop() {
             bot.vy = Math.sin(angleToEnemy) * moveSpeed;
             bot.aimAngle = angleToEnemy;
             bot.wanderAngle = angleToEnemy;
+
+            // If we have rifle and enemy was behind wall, try shooting through it
+            if (
+              bot.weapon === "rifle" &&
+              bot.lastKnownEnemy.behindWall &&
+              now - bot.lastKnownEnemy.time < 3000
+            ) {
+              // Recent enemy behind wall - try wall penetration shot
+              const penetrationCheck = canShootThroughWall(
+                bot.x,
+                bot.y,
+                bot.lastKnownEnemy.x,
+                bot.lastKnownEnemy.y,
+                VISION_RANGE,
+              );
+              if (penetrationCheck && Math.random() < 0.6) {
+                // 60% chance to shoot at last known position through wall
+                handleShoot(bot);
+              }
+            }
           } else {
             // Reached last known position, clear it
             bot.lastKnownEnemy = null;
