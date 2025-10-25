@@ -8,14 +8,14 @@ export class GeminiClient {
   async generateModCode(userPrompt) {
     // Always make request through backend
     try {
-      const response = await fetch('/api/generate-mod', {
-        method: 'POST',
+      const response = await fetch("/api/generate-mod", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          prompt: userPrompt
-        })
+          prompt: userPrompt,
+        }),
       });
 
       if (!response.ok) {
@@ -25,11 +25,9 @@ export class GeminiClient {
 
       const data = await response.json();
       return data.code;
-
     } catch (error) {
-      console.error('Error generating code:', error);
+      console.error("Error generating code:", error);
       throw error;
     }
   }
-
 }
