@@ -154,13 +154,22 @@ export class ModEditor {
       .addEventListener("click", () => this.hide());
 
     this.input.addEventListener("keydown", (e) => {
+      // Only allow ESC and ENTER - block all other hotkeys
       if (e.key === "Enter" && !this.isGenerating) {
         e.preventDefault();
+        e.stopPropagation();
         this.handleSubmit();
+        return;
       }
       if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
         this.hide();
+        return;
       }
+      // Allow normal typing (letters, numbers, space, backspace, etc.)
+      // But prevent propagation to stop game hotkeys
+      e.stopPropagation();
     });
 
     // Global keyboard shortcut (backtick key like Quake console)
