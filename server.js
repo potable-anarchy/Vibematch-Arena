@@ -737,7 +737,9 @@ function handleShoot(player) {
 
 // Game loop
 const TICK_INTERVAL = 1000 / GAME_CONFIG.TICK_RATE;
+const STATE_BROADCAST_INTERVAL = 1000 / 30; // Broadcast state 30 times per second
 let lastTick = Date.now();
+let lastStateBroadcast = Date.now();
 
 function gameLoop() {
   try {
@@ -805,8 +807,15 @@ function gameLoop() {
           const IDEAL_COMBAT_RANGE = 200; // Maintain this distance
           const MIN_COMBAT_RANGE = 100; // Too close, back up
 
-          // Try to find cover
-          const cover = findNearestCover(bot.x, bot.y, nearestTarget.x, nearestTarget.y);
+          // Try to find cover (only check occasionally, not every think cycle)
+          let cover = null;
+          if (!bot.lastCoverCheck || now - bot.lastCoverCheck > 1000) {
+            cover = findNearestCover(bot.x, bot.y, nearestTarget.x, nearestTarget.y);
+            bot.cachedCover = cover;
+            bot.lastCoverCheck = now;
+          } else {
+            cover = bot.cachedCover;
+          }
 
           // Movement logic based on distance and cover
           if (nearestDist < MIN_COMBAT_RANGE) {
@@ -1018,32 +1027,37 @@ function gameLoop() {
       ...Array.from(gameState.bots.values())
     ];
 
-    const state = {
-      players: allPlayers.map((p) => ({
-        id: p.id,
-        name: p.name,
-        x: p.x,
-        y: p.y,
-        aimAngle: p.aimAngle,
-        health: p.health,
-        armor: p.armor,
-        weapon: p.weapon,
-        ammo: p.ammo,
-        kills: p.kills,
-        deaths: p.deaths,
-        reloading: p.reloading,
-        invulnerable: p.invulnerable > now,
-      })),
-      pickups: gameState.pickups.map((p) => ({
-        id: p.id,
-        x: p.x,
-        y: p.y,
-        type: p.type,
-        active: p.active,
-      })),
-    };
+    // Only broadcast state at reduced rate (not every tick)
+    if (now - lastStateBroadcast >= STATE_BROADCAST_INTERVAL) {
+      lastStateBroadcast = now;
 
-    io.emit("state", state);
+      const state = {
+        players: allPlayers.map((p) => ({
+          id: p.id,
+          name: p.name,
+          x: Math.round(p.x), // Round positions to reduce data size
+          y: Math.round(p.y),
+          aimAngle: Math.round(p.aimAngle * 100) / 100, // Round to 2 decimals
+          health: Math.round(p.health),
+          armor: Math.round(p.armor),
+          weapon: p.weapon,
+          ammo: p.ammo,
+          kills: p.kills,
+          deaths: p.deaths,
+          reloading: p.reloading,
+          invulnerable: p.invulnerable > now,
+        })),
+        pickups: gameState.pickups.map((p) => ({
+          id: p.id,
+          x: p.x,
+          y: p.y,
+          type: p.type,
+          active: p.active,
+        })),
+      };
+
+      io.emit("state", state);
+    }
   } catch (error) {
     console.error("❌ Error in game loop:", error);
     console.error("Stack:", error.stack);
