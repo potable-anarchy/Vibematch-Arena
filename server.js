@@ -290,7 +290,7 @@ const GAME_CONFIG = {
   PLAYER_MAX_HEALTH: 100,
   PLAYER_START_ARMOR: 0,
   RESPAWN_DELAY: 1500, // ms
-  SPAWN_INVULN_TIME: 600, // ms
+  SPAWN_INVULN_TIME: 2000, // ms
   SCORE_LIMIT: 15, // Round ends when a player reaches this kill count
 };
 
