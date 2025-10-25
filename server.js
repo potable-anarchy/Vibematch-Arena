@@ -729,10 +729,11 @@ function gameLoop() {
       if (now > bot.thinkTimer) {
         bot.thinkTimer = now + 200;
 
-        // Find nearest human player
-        let nearestPlayer = null;
+        // Find nearest target (human players or other bots)
+        let nearestTarget = null;
         let nearestDist = Infinity;
 
+        // Check human players
         for (const player of gameState.players.values()) {
           if (player.health <= 0) continue;
           const dx = player.x - bot.x;
@@ -740,17 +741,29 @@ function gameLoop() {
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < nearestDist) {
             nearestDist = dist;
-            nearestPlayer = player;
+            nearestTarget = player;
           }
         }
 
-        // If player in range, aim and shoot
-        if (nearestPlayer && nearestDist < 600) {
-          const dx = nearestPlayer.x - bot.x;
-          const dy = nearestPlayer.y - bot.y;
+        // Check other bots
+        for (const [otherId, otherBot] of gameState.bots) {
+          if (otherId === id || otherBot.health <= 0) continue;
+          const dx = otherBot.x - bot.x;
+          const dy = otherBot.y - bot.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearestTarget = otherBot;
+          }
+        }
+
+        // If target in range, aim and shoot
+        if (nearestTarget && nearestDist < 600) {
+          const dx = nearestTarget.x - bot.x;
+          const dy = nearestTarget.y - bot.y;
           bot.aimAngle = Math.atan2(dy, dx);
 
-          // Move towards player
+          // Move towards target
           const moveSpeed = GAME_CONFIG.PLAYER_SPEED;
           bot.vx = Math.cos(bot.aimAngle) * moveSpeed;
           bot.vy = Math.sin(bot.aimAngle) * moveSpeed;
