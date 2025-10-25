@@ -267,6 +267,74 @@ function findNearestCover(botX, botY, enemyX, enemyY, maxDist = 250) {
   return bestCover;
 }
 
+// Find best pickup for bot based on current needs
+function findBestPickup(bot) {
+  let bestPickup = null;
+  let bestScore = -Infinity;
+
+  for (const pickup of gameState.pickups) {
+    if (!pickup.active) continue;
+
+    const dx = pickup.x - bot.x;
+    const dy = pickup.y - bot.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Calculate priority score based on bot's needs
+    let priority = 0;
+
+    if (pickup.type.startsWith("health")) {
+      const healthMissing = GAME_CONFIG.PLAYER_MAX_HEALTH - bot.health;
+      if (healthMissing > 0) {
+        const config = PICKUP_TYPES[pickup.type];
+        // Higher priority when health is lower
+        priority = (healthMissing / GAME_CONFIG.PLAYER_MAX_HEALTH) * 3.0;
+        // Prefer big health when very low
+        if (bot.health < 40 && pickup.type === "health_big") {
+          priority *= 1.5;
+        }
+      }
+    } else if (pickup.type.startsWith("armor")) {
+      const armorMissing = 100 - bot.armor;
+      if (armorMissing > 0) {
+        // Armor is valuable but less urgent than health
+        priority = (armorMissing / 100) * 2.0;
+        // Prefer heavy armor when we have none
+        if (bot.armor < 30 && pickup.type === "armor_heavy") {
+          priority *= 1.3;
+        }
+      }
+    } else if (pickup.type === "ammo") {
+      const ammoMissing = WEAPONS[bot.weapon].mag - bot.ammo;
+      if (ammoMissing > 0) {
+        // Ammo is important but less than health/armor
+        priority = (ammoMissing / WEAPONS[bot.weapon].mag) * 1.5;
+      }
+    } else if (pickup.type.startsWith("weapon_")) {
+      const config = PICKUP_TYPES[pickup.type];
+      // Only interested if it's a better weapon
+      if (config.weapon !== bot.weapon) {
+        // Prioritize weapon upgrades
+        if (bot.weapon === "pistol") priority = 2.0;
+        else if (config.weapon === "rifle") priority = 1.2;
+        else priority = 0.8;
+      }
+    }
+
+    if (priority <= 0) continue;
+
+    // Score combines priority and distance (closer is better)
+    const distanceFactor = 1 / (distance / 100 + 1);
+    const score = priority * distanceFactor;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestPickup = pickup;
+    }
+  }
+
+  return bestPickup;
+}
+
 // Check if position collides with any walls or crates
 function checkWallCollision(x, y, radius) {
   // Check walls
@@ -850,16 +918,30 @@ function gameLoop() {
             handleShoot(bot);
           }
         } else {
-          // Wander randomly
-          if (now > bot.wanderTimer) {
-            bot.wanderAngle = Math.random() * Math.PI * 2;
-            bot.wanderTimer = now + 2000 + Math.random() * 2000;
+          // No active target - roam for pickups
+          const bestPickup = findBestPickup(bot);
+
+          if (bestPickup) {
+            // Move toward the best pickup
+            const dx = bestPickup.x - bot.x;
+            const dy = bestPickup.y - bot.y;
+            const angle = Math.atan2(dy, dx);
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.6;
+            bot.vx = Math.cos(angle) * moveSpeed;
+            bot.vy = Math.sin(angle) * moveSpeed;
+            bot.aimAngle = angle;
+          } else {
+            // No useful pickups - wander randomly
+            if (now > bot.wanderTimer) {
+              bot.wanderAngle = Math.random() * Math.PI * 2;
+              bot.wanderTimer = now + 2000 + Math.random() * 2000;
+            }
+            const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
+            bot.vx = Math.cos(bot.wanderAngle) * moveSpeed;
+            bot.vy = Math.sin(bot.wanderAngle) * moveSpeed;
+            // Look in movement direction when wandering
+            bot.aimAngle = bot.wanderAngle;
           }
-          const moveSpeed = GAME_CONFIG.PLAYER_SPEED * 0.5;
-          bot.vx = Math.cos(bot.wanderAngle) * moveSpeed;
-          bot.vy = Math.sin(bot.wanderAngle) * moveSpeed;
-          // Look in movement direction when wandering
-          bot.aimAngle = bot.wanderAngle;
         }
       }
 
@@ -895,6 +977,63 @@ function gameLoop() {
       if (bot.ammo <= 0 && !bot.reloading) {
         bot.reloading = true;
         bot.reloadFinish = now + WEAPONS[bot.weapon].reload * 1000;
+      }
+
+      // Check pickup collisions for bots
+      for (const pickup of gameState.pickups) {
+        if (!pickup.active) continue;
+
+        const dx = bot.x - pickup.x;
+        const dy = bot.y - pickup.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < GAME_CONFIG.PLAYER_RADIUS + 20) {
+          // Collect pickup
+          const config = PICKUP_TYPES[pickup.type];
+          let collected = false;
+
+          if (
+            pickup.type.startsWith("health") &&
+            bot.health < GAME_CONFIG.PLAYER_MAX_HEALTH
+          ) {
+            bot.health = Math.min(
+              GAME_CONFIG.PLAYER_MAX_HEALTH,
+              bot.health + config.amount,
+            );
+            collected = true;
+          } else if (pickup.type.startsWith("armor")) {
+            bot.armor = Math.min(100, bot.armor + config.amount);
+            collected = true;
+          } else if (
+            pickup.type === "ammo" &&
+            bot.ammo < WEAPONS[bot.weapon].mag
+          ) {
+            bot.ammo = Math.min(
+              WEAPONS[bot.weapon].mag,
+              bot.ammo + Math.floor(WEAPONS[bot.weapon].mag * 0.4),
+            );
+            collected = true;
+          } else if (pickup.type.startsWith("weapon_")) {
+            // Weapon pickup
+            const newWeapon = config.weapon;
+            if (bot.weapon !== newWeapon) {
+              bot.weapon = newWeapon;
+              bot.ammo = WEAPONS[newWeapon].mag;
+              bot.maxAmmo = WEAPONS[newWeapon].mag;
+              bot.reloading = false;
+              collected = true;
+            }
+          }
+
+          if (collected) {
+            pickup.active = false;
+            pickup.respawnAt = now + config.respawn;
+            io.emit("pickupCollected", {
+              playerId: id,
+              pickupId: pickup.id,
+            });
+          }
+        }
       }
     }
 
