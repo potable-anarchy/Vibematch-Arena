@@ -66,6 +66,13 @@ class SoundManager {
     source.connect(gainNode);
     gainNode.connect(this.context.destination);
 
+    // Clean up nodes after playback finishes to prevent memory leaks
+    // This is critical for Safari which has stricter limits on active AudioNodes
+    source.onended = () => {
+      gainNode.disconnect();
+      source.disconnect();
+    };
+
     source.start(0);
   }
 }
