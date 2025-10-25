@@ -1,0 +1,10 @@
+{
+  "mods": [
+    {
+      "name": "Sound Effects",
+      "file": "sound-effects.js",
+      "description": "Adds gun, hit, and death sound effects to the game",
+      "enabled": true
+    }
+  ]
+}
