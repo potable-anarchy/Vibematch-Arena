@@ -3,7 +3,7 @@ services:
     name: vibematch-arena
     env: docker
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: PORT

@@ -59,8 +59,13 @@ const io = new Server(httpServer, {
 
 const PORT = process.env.PORT || 5500;
 
+// Health check endpoint for Render (must be before static middleware)
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "healthy", bots: gameState.bots.size });
+});
+
 // Middleware
-app.use(express.static("public"));
+app.use(express.static(join(__dirname, "public")));
 app.use(express.json()); // Parse JSON request bodies
 
 app.get("/", (req, res) => {
