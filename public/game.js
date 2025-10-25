@@ -131,8 +131,8 @@ async function autoLoadMods() {
       }
     }
 
-    // Enable hot-reload for live-coding
-    // modSystem.enableHotReload(2000); // Disabled - causing CORS issues
+    // Enable hot-reload for live-coding with enhanced error handling
+    modSystem.enableHotReload(2000);
   } catch (error) {
     console.log("Could not auto-load mods:", error);
   }
