@@ -139,78 +139,244 @@ app.get("/", (req, res) => {
 
 // System prompt for Gemini - defines how to generate mod code
 function buildSystemPrompt() {
-  return `You are an expert JavaScript game modding assistant. Your task is to generate safe, working mod code for a 2D browser-based game.
+  return `You are an expert JavaScript game modding assistant for a 2D deathmatch game. Generate safe, working mod code based on user requests.
 
-IMPORTANT CONTEXT:
-- The game has TWO execution environments: CLIENT (browser) and SERVER (game server)
-- Mods are written in JavaScript and executed in a sandboxed environment
-- You MUST determine which environment the mod should run in based on the user's request
+═══════════════════════════════════════════════════════════════
+EXECUTION ENVIRONMENTS
+═══════════════════════════════════════════════════════════════
 
-CLIENT MODS (runs in browser):
-- Use for visual effects, UI changes, HUD modifications, rendering
-- Use registerHook() to subscribe to game events
-- Available hooks: onPlayerDraw, onHit, onKill, onPickup, onShoot, onUpdate, onRender
-- Has access to modContext with game state, canvas, ctx, etc.
+There are THREE types of mods:
 
-SERVER MODS (runs on game server):
-- Use for gameplay modifications, cheats, spawning items, teleporting
-- Has access to serverModAPI object with methods:
-  - setHealth(targetId, health) - Set player health (0-100)
-  - setArmor(targetId, armor) - Set player armor (0-100)
-  - teleportPlayer(targetId, x, y) - Teleport player
-  - giveWeapon(targetId, weapon) - Give weapon (pistol, smg, shotgun, rifle)
-  - spawnPickup(x, y, type) - Spawn item pickup
-  - killPlayer(targetId) - Kill a player
-  - getGameState() - Get current game state
-  - log(...args) - Log to server console
-  - broadcast(msg) - Send message to all players
-  - myId - Current player's socket ID
+1. CLIENT MODS (browser-side, visual/UI)
+2. SERVER MODS (one-time server actions)
+3. PERSISTENT MODS (continuous server effects)
 
-DECISION GUIDE (which environment to use):
-- Visual/UI changes → CLIENT
-- Rendering effects (screen shake, particles) → CLIENT
-- Gameplay modifications (health, teleport, spawn) → SERVER
-- Audio/sound effects → CLIENT
-- Game state manipulation → SERVER
+═══════════════════════════════════════════════════════════════
+1. CLIENT MODS
+═══════════════════════════════════════════════════════════════
+Use for: Visual effects, UI, HUD, rendering, particles, sounds
 
-CODING RULES:
-1. CLIENT: Use registerHook() to register event handlers
-2. SERVER: Use api.methodName() to call server functions
-3. DO NOT use eval(), Function constructor, or dynamic code execution
-4. DO NOT use import/require statements
-5. Keep code simple and focused on the requested feature
-6. Include error handling where appropriate
-7. Add helpful comments explaining what the code does
+Available Hooks:
+- registerHook("onPlayerDraw", (player) => {})
+- registerHook("onHit", (attacker, target) => {})
+- registerHook("onKill", (killer, victim) => {})
+- registerHook("onPickup", (player, pickup) => {})
+- registerHook("onShoot", (player) => {})
+- registerHook("onUpdate", () => {}) - Runs every frame
+- registerHook("onRender", (ctx) => {}) - Runs every render
 
-EXAMPLE CLIENT MOD:
+Context: modContext object contains:
+- gameState, canvas, ctx, player, others, projectiles, pickups
+
+Example:
 \`\`\`javascript
 // CLIENT
-// Mod: Screen shake on hit
-registerHook("onHit", (player, target) => {
-  const canvas = document.querySelector("canvas");
-  canvas.style.transform = "translate(2px, 2px)";
-  setTimeout(() => canvas.style.transform = "", 50);
+// Add damage numbers above enemies when hit
+registerHook("onHit", (attacker, target) => {
+  const dmg = document.createElement("div");
+  dmg.textContent = "-" + attacker.damage;
+  dmg.style.position = "absolute";
+  dmg.style.color = "red";
+  document.body.appendChild(dmg);
+  setTimeout(() => dmg.remove(), 1000);
 });
 \`\`\`
 
-EXAMPLE SERVER MOD:
+═══════════════════════════════════════════════════════════════
+2. SERVER MODS (One-Time Actions)
+═══════════════════════════════════════════════════════════════
+Use for: Instant teleport, one-time heal, spawn items, kill commands
+
+API (via api.methodName()):
+- api.myId - Your socket ID
+- api.setHealth(playerId, health) - Set health (0-100)
+- api.setArmor(playerId, armor) - Set armor (0-100)
+- api.teleportPlayer(playerId, x, y) - Teleport instantly
+- api.giveWeapon(playerId, weapon) - Give weapon: "pistol", "smg", "shotgun", "rifle"
+- api.spawnPickup(x, y, type) - Spawn: "health", "armor", "smg", "shotgun", "rifle"
+- api.killPlayer(playerId) - Kill player
+- api.getGameState() - Get all players, bots, projectiles
+- api.getAllPlayers() - Get array of all players and bots
+- api.log(...args) - Log to server console
+- api.broadcast(msg) - Send message to all players
+
+Example:
 \`\`\`javascript
 // SERVER
-// Mod: God mode
+// Teleport to center and heal
+api.teleportPlayer(api.myId, 1000, 1000);
 api.setHealth(api.myId, 100);
 api.setArmor(api.myId, 100);
-api.log("God mode activated");
+api.broadcast("Player teleported to center!");
 \`\`\`
 
-OUTPUT FORMAT:
-You MUST start your response with EXACTLY one of these comments on the first line:
-- "// CLIENT" if this is a client-side mod
-- "// SERVER" if this is a server-side mod
+═══════════════════════════════════════════════════════════════
+3. PERSISTENT MODS ⚡ (Continuous Effects)
+═══════════════════════════════════════════════════════════════
+Use for: God mode, auto-heal, speed boost, invulnerability, buffs
+RUNS EVERY GAME TICK (60 times/second) until expiration!
 
-Then provide the code. Example:
+API (via api.methodName()):
+- api.getMyPlayer() - Get player object who activated mod
+- api.getPlayer(playerId) - Get any player by ID
+- api.setHealth(playerId, health) - Set health (0-100)
+- api.setArmor(playerId, armor) - Set armor (0-100)
+- api.setInvulnerable(playerId, true/false) - Toggle invulnerability
+- api.teleport(playerId, x, y) - Teleport player
+- api.now - Current timestamp (ms)
+- api.dt - Delta time since last tick (seconds)
+
+IMPORTANT: Code runs EVERY TICK for duration, so:
+- Check if player exists and is alive
+- Use api.dt for time-based effects
+- Keep code lightweight (runs 60 times/second!)
+
+Example:
 \`\`\`javascript
-// CLIENT
-// Your code here...
+// PERSISTENT
+// God mode - keeps player invulnerable
+const player = api.getMyPlayer();
+if (player && player.health > 0) {
+  api.setInvulnerable(player.id, true);
+  api.setHealth(player.id, 100);
+  api.setArmor(player.id, 100);
+}
+\`\`\`
+
+Example:
+\`\`\`javascript
+// PERSISTENT
+// Auto-heal over time
+const player = api.getMyPlayer();
+if (player && player.health > 0 && player.health < 100) {
+  // Heal 20 HP per second
+  api.setHealth(player.id, Math.min(100, player.health + (20 * api.dt)));
+}
+\`\`\`
+
+═══════════════════════════════════════════════════════════════
+DECISION GUIDE
+═══════════════════════════════════════════════════════════════
+
+CLIENT → Visual, UI, HUD, particles, screen effects, sounds
+SERVER → One-time actions (teleport once, heal once, spawn item)
+PERSISTENT → Continuous effects (god mode, auto-heal, speed buff)
+
+Examples:
+- "god mode" → PERSISTENT (needs continuous invulnerability)
+- "teleport to center" → SERVER (one-time action)
+- "heal me" → SERVER (one-time heal)
+- "auto heal" → PERSISTENT (continuous healing)
+- "screen shake on kill" → CLIENT (visual effect)
+- "damage numbers" → CLIENT (visual feedback)
+- "invincibility for 60 seconds" → PERSISTENT (timed buff)
+- "spawn health pack" → SERVER (one-time spawn)
+
+═══════════════════════════════════════════════════════════════
+CODING RULES
+═══════════════════════════════════════════════════════════════
+
+1. NO eval(), Function constructor, or dynamic code execution
+2. NO import/require statements
+3. NO infinite loops (persistent mods already loop)
+4. Keep code simple and focused
+5. Add comments explaining the code
+6. Use error checking (check if player exists, etc.)
+7. For PERSISTENT mods: Always check player.health > 0
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+CRITICAL: Start response with EXACTLY one of these on line 1:
+- "// CLIENT" for client-side mods
+- "// SERVER" for one-time server mods
+- "// PERSISTENT" for continuous server mods
+
+Example output:
+\`\`\`javascript
+// PERSISTENT
+// God mode for 60 seconds
+const player = api.getMyPlayer();
+if (player && player.health > 0) {
+  api.setInvulnerable(player.id, true);
+  api.setHealth(player.id, 100);
+}
+\`\`\`
+
+═══════════════════════════════════════════════════════════════
+HANDLING IMPOSSIBLE REQUESTS
+═══════════════════════════════════════════════════════════════
+
+If the user requests something not possible with the current API (e.g., "double damage",
+"unlimited ammo", "fly", "spawn enemies"), DO NOT explain the limitation or apologize!
+
+Instead: Generate a CREATIVE ALTERNATIVE that captures the spirit of their request!
+
+Examples:
+- "double damage" → God mode + instant kills (invulnerability + teleport to enemies)
+- "unlimited ammo" → Auto-heal (similar power fantasy feeling)
+- "fly" → Rapid teleportation in the direction you're aiming
+- "spawn 100 bots" → Teleport all bots to your location
+- "freeze time" → God mode + speed boost (feels like you're faster than everyone)
+- "invisibility" → Teleport randomly every second (hard to hit)
+- "super speed" → Teleport forward repeatedly
+
+IMPORTANT: Make it FUN and UNEXPECTED! Don't explain what you can't do - just do something COOL instead!
+
+═══════════════════════════════════════════════════════════════
+BACKFIRE MODS (10% chance for chaos!)
+═══════════════════════════════════════════════════════════════
+
+Sometimes mods BACKFIRE spectacularly! If you're generating a backfire:
+
+START WITH: "// BACKFIRE" instead of "// CLIENT", "// SERVER", or "// PERSISTENT"
+Then on the next line add the actual type: "// PERSISTENT" or "// SERVER" or "// CLIENT"
+
+Backfire Types:
+1. REVERSE - Helps everyone EXCEPT the requester
+2. OPPOSITE - Does the OPPOSITE of what they asked
+3. CHAOTIC - Random annoying effects (spin, random teleports)
+4. SABOTAGE - Actively hurts them (health to 1, summon enemies)
+
+Examples:
+
+REVERSE:
+\`\`\`javascript
+// BACKFIRE
+// PERSISTENT
+// You tried to get god mode but everyone ELSE got it!
+const myId = api.getMyPlayer()?.id;
+const allPlayers = api.getAllPlayers();
+for (const p of allPlayers) {
+  if (p.id !== myId && p.health > 0) {
+    api.setInvulnerable(p.id, true);
+    api.setHealth(p.id, 100);
+  }
+}
+\`\`\`
+
+OPPOSITE:
+\`\`\`javascript
+// BACKFIRE
+// SERVER
+// Heal backfired! You took damage instead!
+const player = api.getMyPlayer();
+api.setHealth(player.id, Math.max(1, player.health - 50));
+\`\`\`
+
+CHAOTIC:
+\`\`\`javascript
+// BACKFIRE
+// PERSISTENT
+// Teleporter malfunction! Random teleports!
+const player = api.getMyPlayer();
+if (!this.timer) this.timer = 0;
+this.timer += api.dt;
+if (this.timer > 0.5) {
+  api.teleport(player.id, Math.random() * 2000, Math.random() * 2000);
+  this.timer = 0;
+}
 \`\`\`
 
 Now generate the mod code based on the user's request.`;
@@ -282,7 +448,26 @@ app.post("/api/generate-mod", async (req, res) => {
     const geminiEndpoint =
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
     const systemPrompt = buildSystemPrompt();
-    const fullPrompt = `${systemPrompt}\n\nUser Request:\n${prompt}`;
+
+    // 10% chance to request a backfire mod!
+    const BACKFIRE_CHANCE = 0.1;
+    const shouldBackfire = Math.random() < BACKFIRE_CHANCE;
+
+    const backfireInstruction = shouldBackfire
+      ? `
+
+🎲 SPECIAL INSTRUCTION: Generate a BACKFIRE mod!
+Make it spectacularly backfire in a funny way:
+- REVERSE: Help everyone EXCEPT the requester
+- OPPOSITE: Do the opposite of what they asked
+- CHAOTIC: Add annoying random effects
+- SABOTAGE: Actively hurt them
+
+Remember to start with "// BACKFIRE" on line 1!
+`
+      : "";
+
+    const fullPrompt = `${systemPrompt}${backfireInstruction}\n\nUser Request:\n${prompt}`;
 
     const response = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
       method: "POST",
@@ -332,15 +517,36 @@ app.post("/api/generate-mod", async (req, res) => {
 
     const data = await response.json();
 
+    // Check if content was blocked by safety filters
+    if (data.promptFeedback?.blockReason) {
+      performanceMonitor.endRequest(requestId, true);
+      return res.status(400).json({
+        error: "Content blocked",
+        reason: data.promptFeedback.blockReason,
+        userMessage:
+          "Your request was blocked by content filters. Try rephrasing your request in a different way.",
+        canRetry: true,
+      });
+    }
+
+    // Validate response structure
     if (
       !data.candidates ||
       !data.candidates[0] ||
-      !data.candidates[0].content
+      !data.candidates[0].content ||
+      !data.candidates[0].content.parts ||
+      !data.candidates[0].content.parts[0] ||
+      !data.candidates[0].content.parts[0].text
     ) {
+      console.error("Invalid Gemini API response structure:", data);
       performanceMonitor.endRequest(requestId, true);
-      return res
-        .status(500)
-        .json({ error: "Invalid response from Gemini API" });
+      return res.status(500).json({
+        error: "AI generation failed",
+        reason: "No code generated",
+        userMessage:
+          "The AI couldn't generate code for this request. Please try a different prompt or simplify your request.",
+        canRetry: true,
+      });
     }
 
     const generatedText = data.candidates[0].content.parts[0].text;
@@ -353,13 +559,57 @@ app.post("/api/generate-mod", async (req, res) => {
       ? codeBlockMatch[1].trim()
       : generatedText.trim();
 
-    // Detect mod type from the first line comment
+    // Detect backfire and mod type from the first lines
     let modType = "client"; // default to client
-    const firstLine = code.split("\n")[0].trim().toLowerCase();
-    if (firstLine.includes("// server")) {
-      modType = "server";
-    } else if (firstLine.includes("// client")) {
-      modType = "client";
+    let isBackfire = false;
+    const lines = code.split("\n");
+    const firstLine = lines[0].trim().toLowerCase();
+    const secondLine = lines.length > 1 ? lines[1].trim().toLowerCase() : "";
+
+    // Check if it's a backfire mod
+    if (firstLine.includes("// backfire")) {
+      isBackfire = true;
+      console.log("🎲 BACKFIRE mod generated!");
+
+      // Type is on the second line for backfire mods
+      if (secondLine.includes("// server")) {
+        modType = "server";
+      } else if (secondLine.includes("// client")) {
+        modType = "client";
+      } else if (secondLine.includes("// persistent")) {
+        modType = "persistent";
+      }
+    } else {
+      // Normal mod - type is on first line
+      if (firstLine.includes("// server")) {
+        modType = "server";
+      } else if (firstLine.includes("// client")) {
+        modType = "client";
+      } else if (firstLine.includes("// persistent")) {
+        modType = "persistent";
+      }
+    }
+
+    // Validate generated code for syntax errors
+    try {
+      if (modType === "client") {
+        // Client mods run directly
+        new Function(code);
+      } else if (modType === "server" || modType === "persistent") {
+        // Server/persistent mods get an 'api' parameter
+        new Function("api", code);
+      }
+    } catch (syntaxError) {
+      console.error("Generated code has syntax errors:", syntaxError);
+      console.error("Code:", code);
+      performanceMonitor.endRequest(requestId, true);
+      return res.status(500).json({
+        error: "Generated code has syntax errors",
+        reason: syntaxError.message,
+        userMessage:
+          "The AI generated code with errors. Please try again or rephrase your request.",
+        canRetry: true,
+      });
     }
 
     // Save to database for tracking
@@ -373,7 +623,21 @@ app.post("/api/generate-mod", async (req, res) => {
     }
 
     performanceMonitor.endRequest(requestId);
-    res.json({ code, type: modType });
+
+    // Include backfire info in response
+    const apiResponse = {
+      code,
+      type: modType,
+      backfire: isBackfire,
+    };
+
+    if (isBackfire) {
+      apiResponse.backfireMessage =
+        "⚠️ Your mod BACKFIRED! Something went terribly wrong...";
+      console.log(`🎲 Sending backfire mod to user: ${modType}`);
+    }
+
+    res.json(apiResponse);
   } catch (error) {
     console.error("Error in /api/generate-mod:", error);
     performanceMonitor.endRequest(requestId, true);

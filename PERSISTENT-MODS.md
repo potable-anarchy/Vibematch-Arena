@@ -1,8 +1,95 @@
-# Persistent Mod System
+# Mod System Documentation
+
+## Three Types of Mods
+
+The game supports three distinct types of mods, each with different capabilities and use cases:
+
+### 1. CLIENT MODS (Browser-Side, Visual/UI)
+- **Runs:** In the player's browser only
+- **Duration:** Continuous (loads with page, runs forever)
+- **Stored:** As files in `public/mods/` directory
+- **Use for:** Visual effects, UI modifications, sounds, cosmetic changes
+
+### 2. SERVER MODS (One-Time Server Actions)
+- **Runs:** On the game server
+- **Duration:** Executes ONCE when activated
+- **Stored:** Not stored, executes and completes
+- **Use for:** Instant teleportation, one-time heals, spawn items, trigger events
+
+### 3. PERSISTENT MODS (Continuous Server Effects) ⚡
+- **Runs:** On the game server
+- **Duration:** Every game tick (60 times/second) until expiration
+- **Stored:** In database (`active_mods` table) with expiration time
+- **Use for:** God mode, auto-heal, buffs, continuous gameplay effects
+
+---
+
+## Quick Decision Guide
+
+**"I want to change how things look/sound"** → **CLIENT MOD**
+- Examples: Rainbow gun, custom crosshair, screen shake, hit sounds
+
+**"I want something to happen once, right now"** → **SERVER MOD**  
+- Examples: Teleport once, instant heal, spawn item, reset score
+
+**"I want an ongoing effect over time"** → **PERSISTENT MOD**
+- Examples: God mode, auto-heal, speed buff, regeneration
+
+---
+
+## Use Case Examples by Type
+
+### CLIENT MOD Use Cases:
+- Custom reticle colors and styles
+- Hit marker sounds and visual feedback
+- Kill feed animations and styling
+- Screen flash effects on damage
+- Custom UI overlays and HUD elements
+- Particle effects and trails
+- Camera shake and screen effects
+- Background music and ambient sounds
+- Custom death/respawn animations
+
+**Key Limitation:** Cannot affect actual gameplay - server is authoritative. Can't give yourself god mode, extra damage, or cheat via client mods.
+
+### SERVER MOD Use Cases:
+- `/teleport spawn` - Instant teleport to location
+- `/heal` - Instant heal to full health
+- `/giveweapon awp` - Spawn specific weapon once
+- `/killbots` - Kill all bots instantly
+- Reset player score or stats
+- Trigger one-time game events
+- Spawn items or powerups at location
+- Execute admin commands
+- One-time configuration changes
+
+**Key Limitation:** Only runs once. After execution, it's done. No continuous effects.
+
+### PERSISTENT MOD Use Cases:
+- God mode (continuous invulnerability)
+- Health regeneration (heal X HP per second)
+- Speed boost (increased movement speed over time)
+- Damage over time effects
+- Auto-aim assistance (continuous targeting help)
+- Follow mechanics (make entity track player)
+- Area effects (damage/heal zones that tick)
+- Stat buffs (double damage, extra armor)
+- Time-based challenges (survive for 60 seconds)
+- Persistent visual trails with server validation
+
+**Key Characteristics:**
+- Max duration: 5 minutes (300,000ms)
+- Executes 60 times per second
+- Automatically expires and cleans up
+- Removed when player disconnects
+
+---
+
+# Persistent Mod System (Details)
 
 ## Overview
 
-The persistent mod system allows players to create live gameplay mods that execute every game tick (60 times per second) until they expire. This enables powerful runtime modifications like god mode, teleportation, stat modifications, and more.
+The persistent mod system allows players to create live gameplay mods that execute every game tick (60 times per second) until they expire. This enables powerful runtime modifications like god mode, regeneration, buffs, and more.
 
 ## How It Works
 

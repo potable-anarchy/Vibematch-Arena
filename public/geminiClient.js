@@ -26,7 +26,9 @@ export class GeminiClient {
       const data = await response.json();
       return {
         code: data.code,
-        type: data.type || "client", // "client" or "server"
+        type: data.type || "client", // "client", "server", or "persistent"
+        backfire: data.backfire || false,
+        backfireMessage: data.backfireMessage,
       };
     } catch (error) {
       console.error("Error generating code:", error);

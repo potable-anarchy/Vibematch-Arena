@@ -1,4 +1,4 @@
-// In-game mod editor (non-intrusive)
+// Simple hacker-style mod terminal
 import { GeminiClient } from "./geminiClient.js";
 import { ModHUD } from "./modHUD.js";
 
@@ -6,326 +6,397 @@ export class ModEditor {
   constructor(modSystem) {
     this.modSystem = modSystem;
     this.visible = false;
-    this.currentMod = "";
     this.geminiClient = new GeminiClient();
-    this.isGenerating = false;
     this.modHUD = new ModHUD();
-    this.playerName = "Unknown"; // Will be set when socket connects
+    this.playerName = "Unknown";
     this.createUI();
   }
 
   async createUI() {
-    // Create floating editor window
+    // Create simple terminal window
     this.container = document.createElement("div");
     this.container.id = "modEditor";
     this.container.style.cssText = `
       position: fixed;
-      top: 20%;
-      right: 20px;
-      width: 500px;
-      height: 400px;
-      background: rgba(10, 10, 20, 0.95);
-      border: 2px solid #66ccff;
-      border-radius: 8px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      background: rgba(10, 10, 20, 0.98);
+      border: 2px solid #00ff00;
+      border-radius: 4px;
       display: none;
-      z-index: 9999;
       flex-direction: column;
-      box-shadow: 0 0 30px rgba(102, 204, 255, 0.3);
+      z-index: 9999;
+      box-shadow: 0 0 40px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1);
+      font-family: 'Courier New', monospace;
     `;
 
-    // Header
+    // ASCII art banner
+    const banner = document.createElement("pre");
+    banner.style.cssText = `
+      color: #00ff00;
+      padding: 15px;
+      margin: 0;
+      font-size: 10px;
+      line-height: 1.2;
+      text-align: center;
+      border-bottom: 1px solid #00ff00;
+      background: rgba(0, 255, 0, 0.05);
+      opacity: 0;
+      animation: fadeIn 0.3s forwards;
+    `;
+    banner.textContent = `
+ ███╗   ███╗ ██████╗ ██████╗     ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗
+ ████╗ ████║██╔═══██╗██╔══██╗    ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║
+ ██╔████╔██║██║   ██║██║  ██║       ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║███████║██║
+ ██║╚██╔╝██║██║   ██║██║  ██║       ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██╔══██║██║
+ ██║ ╚═╝ ██║╚██████╔╝██████╔╝       ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║███████╗
+ ╚═╝     ╚═╝ ╚═════╝ ╚═════╝        ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
+                                   [AI-POWERED MOD GENERATOR v2.0]
+    `;
+
+    // Header with close button
     const header = document.createElement("div");
     header.style.cssText = `
-      background: #1a1a2e;
-      padding: 10px;
-      border-bottom: 1px solid #66ccff;
+      background: rgba(0, 255, 0, 0.1);
+      padding: 8px 15px;
+      border-bottom: 1px solid #00ff00;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      cursor: move;
     `;
     header.innerHTML = `
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <span style="color: #66ccff; font-family: monospace; font-weight: bold;">MOD EDITOR</span>
-        <span id="modTypeIndicator" style="
-          background: rgba(102, 204, 255, 0.2);
-          border: 1px solid #66ccff;
-          color: #66ccff;
-          padding: 5px 12px;
-          border-radius: 3px;
-          font-family: monospace;
-          font-weight: bold;
-          font-size: 11px;
-        ">AUTO-DETECT</span>
+      <div style="color: #00ff00; font-size: 12px; opacity: 0.8;">
+        Press \` to close | ENTER to execute
       </div>
       <button id="closeModEditor" style="
-        background: #ff3366;
-        border: none;
-        color: white;
-        padding: 5px 10px;
+        background: transparent;
+        border: 1px solid #00ff00;
+        color: #00ff00;
+        padding: 4px 12px;
         cursor: pointer;
-        border-radius: 3px;
         font-family: monospace;
-      ">✕</button>
+        font-size: 12px;
+        transition: all 0.2s;
+      " onmouseover="this.style.background='#00ff00'; this.style.color='#000'"
+         onmouseout="this.style.background='transparent'; this.style.color='#00ff00'">
+        [ESC]
+      </button>
     `;
 
-    this.detectedModType = null;
-
-    // Mod name input
-    const nameInput = document.createElement("div");
-    nameInput.style.cssText = `
-      padding: 10px;
-      border-bottom: 1px solid rgba(102, 204, 255, 0.2);
-    `;
-    nameInput.innerHTML = `
-      <input
-        type="text"
-        id="modName"
-        placeholder="Mod name..."
-        value="myMod"
-        style="
-          width: 100%;
-          background: #1a1a2e;
-          border: 1px solid #66ccff;
-          color: #fff;
-          padding: 8px;
-          font-family: monospace;
-          border-radius: 3px;
-        "
-      />
+    // Input area
+    const inputArea = document.createElement("div");
+    inputArea.style.cssText = `
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
     `;
 
-    // Code editor
-    const editorWrapper = document.createElement("div");
-    editorWrapper.style.cssText = `
-      flex: 1;
-      overflow: hidden;
-      position: relative;
+    // Prompt label
+    const promptLabel = document.createElement("div");
+    promptLabel.style.cssText = `
+      color: #00ff00;
+      font-size: 14px;
+      opacity: 0.8;
     `;
+    promptLabel.textContent = "// Enter your request and press ENTER";
 
-    this.textarea = document.createElement("textarea");
-    this.textarea.id = "modCode";
-    this.textarea.style.cssText = `
+    // Input field
+    this.input = document.createElement("input");
+    this.input.type = "text";
+    this.input.placeholder = "e.g., give me god mode, heal me, make me fly...";
+    this.input.style.cssText = `
       width: 100%;
-      height: 100%;
-      background: #0a0a14;
-      border: none;
-      color: #66ff66;
-      padding: 10px;
+      background: rgba(0, 255, 0, 0.05);
+      border: 1px solid #00ff00;
+      color: #00ff00;
+      padding: 15px;
       font-family: 'Courier New', monospace;
-      font-size: 13px;
-      resize: none;
+      font-size: 16px;
+      border-radius: 3px;
       outline: none;
+      box-shadow: inset 0 0 10px rgba(0, 255, 0, 0.1);
     `;
-    this.textarea.placeholder = '// Describe what you want the mod to do, then click GENERATE CODE\n// Example: "Add screen shake when I shoot"\n// AI will automatically detect if the code should run on client or server';
-    editorWrapper.appendChild(this.textarea);
+    this.input.addEventListener("focus", () => {
+      this.input.style.boxShadow =
+        "inset 0 0 20px rgba(0, 255, 0, 0.2), 0 0 10px rgba(0, 255, 0, 0.3)";
+    });
+    this.input.addEventListener("blur", () => {
+      this.input.style.boxShadow = "inset 0 0 10px rgba(0, 255, 0, 0.1)";
+    });
 
-    // Generate Code button overlay
-    const generateButton = document.createElement("button");
-    generateButton.id = "generateCode";
-    generateButton.innerHTML = "🤖 GENERATE CODE";
-    generateButton.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: none;
-      color: white;
-      padding: 8px 15px;
-      cursor: pointer;
-      border-radius: 5px;
-      font-family: monospace;
-      font-weight: bold;
-      font-size: 12px;
-      box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);
-      transition: all 0.2s;
-      z-index: 10;
-    `;
-    generateButton.onmouseover = () => {
-      generateButton.style.transform = "translateY(-2px)";
-      generateButton.style.boxShadow = "0 4px 15px rgba(102, 126, 234, 0.6)";
-    };
-    generateButton.onmouseout = () => {
-      generateButton.style.transform = "translateY(0)";
-      generateButton.style.boxShadow = "0 2px 10px rgba(102, 126, 234, 0.4)";
-    };
-    editorWrapper.appendChild(generateButton);
-
-    // File browser
-    const fileBrowser = document.createElement("div");
-    fileBrowser.style.cssText = `
-      padding: 10px;
-      border-top: 1px solid rgba(102, 204, 255, 0.2);
-      display: flex;
-      gap: 10px;
-    `;
-    fileBrowser.innerHTML = `
-      <select id="modFileList" style="
-        flex: 1;
-        background: #1a1a2e;
-        border: 1px solid #ffaa00;
-        color: #fff;
-        padding: 8px;
-        font-family: monospace;
-        border-radius: 3px;
-        cursor: pointer;
-      ">
-        <option value="">-- Load from file --</option>
-      </select>
-      <button id="loadFromFile" style="
-        background: #ffaa00;
-        border: none;
-        color: #0a0a14;
-        padding: 8px 15px;
-        cursor: pointer;
-        border-radius: 3px;
-        font-family: monospace;
-        font-weight: bold;
-      ">LOAD FILE</button>
-    `;
-
-    // Buttons
-    const buttonBar = document.createElement("div");
-    buttonBar.style.cssText = `
-      padding: 10px;
-      border-top: 1px solid rgba(102, 204, 255, 0.2);
-      display: flex;
-      gap: 10px;
-    `;
-    buttonBar.innerHTML = `
-      <button id="loadMod" style="
-        flex: 1;
-        background: #66ccff;
-        border: none;
-        color: #0a0a14;
-        padding: 10px;
-        cursor: pointer;
-        border-radius: 3px;
-        font-family: monospace;
-        font-weight: bold;
-      ">LOAD MOD</button>
-      <button id="reloadMod" style="
-        flex: 1;
-        background: #ffaa00;
-        border: none;
-        color: #0a0a14;
-        padding: 10px;
-        cursor: pointer;
-        border-radius: 3px;
-        font-family: monospace;
-        font-weight: bold;
-      ">RELOAD</button>
-      <button id="unloadMod" style="
-        background: #ff3366;
-        border: none;
-        color: white;
-        padding: 10px 20px;
-        cursor: pointer;
-        border-radius: 3px;
-        font-family: monospace;
-        font-weight: bold;
-      ">UNLOAD</button>
-    `;
-
-    // Status message
-    this.statusDiv = document.createElement("div");
-    this.statusDiv.id = "modStatus";
-    this.statusDiv.style.cssText = `
-      padding: 8px;
-      background: #1a1a2e;
-      color: #66ccff;
-      font-family: monospace;
-      font-size: 12px;
-      border-top: 1px solid rgba(102, 204, 255, 0.2);
+    // Status display
+    this.status = document.createElement("div");
+    this.status.style.cssText = `
       min-height: 24px;
+      color: #00ff00;
+      font-size: 13px;
+      padding: 8px;
+      border-radius: 3px;
+      opacity: 0.9;
     `;
 
-    // Assemble
-    this.container.appendChild(header);
-    this.container.appendChild(nameInput);
-    this.container.appendChild(editorWrapper);
-    this.container.appendChild(fileBrowser);
-    this.container.appendChild(buttonBar);
-    this.container.appendChild(this.statusDiv);
-    document.body.appendChild(this.container);
+    inputArea.appendChild(promptLabel);
+    inputArea.appendChild(this.input);
+    inputArea.appendChild(this.status);
 
-    // Load available mods
-    this.loadAvailableMods();
+    this.container.appendChild(header);
+    this.container.appendChild(inputArea);
+    document.body.appendChild(this.container);
 
     // Event listeners
     document
       .getElementById("closeModEditor")
       .addEventListener("click", () => this.hide());
-    document
-      .getElementById("loadMod")
-      .addEventListener("click", () => this.loadCurrentMod());
-    document
-      .getElementById("reloadMod")
-      .addEventListener("click", () => this.reloadCurrentMod());
-    document
-      .getElementById("unloadMod")
-      .addEventListener("click", () => this.unloadCurrentMod());
-    document
-      .getElementById("loadFromFile")
-      .addEventListener("click", () => this.loadSelectedFile());
-    document
-      .getElementById("generateCode")
-      .addEventListener("click", () => this.generateCode());
 
-    // Make draggable
-    this.makeDraggable(header);
-
-    // Keyboard shortcut to toggle (backtick key)
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "`" && !e.ctrlKey && !e.metaKey) {
+    this.input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !this.isGenerating) {
         e.preventDefault();
-        this.toggle();
+        this.handleSubmit();
       }
-      // Ctrl+Enter to reload mod
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && this.visible) {
+      if (e.key === "Escape") {
+        this.hide();
+      }
+    });
+
+    // Global keyboard shortcut (backtick key like Quake console)
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "`" || e.key === "~") {
         e.preventDefault();
-        this.reloadCurrentMod();
+        if (!document.querySelector("input:focus, textarea:focus")) {
+          this.toggle();
+        }
       }
     });
   }
 
-  makeDraggable(header) {
-    let isDragging = false;
-    let currentX;
-    let currentY;
-    let initialX;
-    let initialY;
+  async handleSubmit() {
+    const prompt = this.input.value.trim();
 
-    header.addEventListener("mousedown", (e) => {
-      isDragging = true;
-      initialX = e.clientX - this.container.offsetLeft;
-      initialY = e.clientY - this.container.offsetTop;
-    });
+    if (!prompt) {
+      this.showStatus("// Enter a request first", "#ff3366");
+      return;
+    }
 
-    document.addEventListener("mousemove", (e) => {
-      if (isDragging) {
-        e.preventDefault();
-        currentX = e.clientX - initialX;
-        currentY = e.clientY - initialY;
-        this.container.style.left = currentX + "px";
-        this.container.style.top = currentY + "px";
-        this.container.style.right = "auto";
+    if (!this.socket) {
+      this.showStatus("// ERROR: Not connected to server", "#ff3366");
+      return;
+    }
+
+    // Hide terminal immediately
+    this.hide();
+
+    // Add mod to HUD with "generating" status
+    const tempModId = `generating_${Date.now()}`;
+    this.modHUD.addGeneratingMod(tempModId, prompt, this.playerName);
+
+    try {
+      this.isGenerating = true;
+
+      // Generate code with AI
+      const result = await this.geminiClient.generateModCode(prompt);
+
+      // Remove the "generating" entry
+      this.modHUD.removeMod(tempModId);
+
+      // Check for backfire
+      if (result.backfire) {
+        this.showBackfireWarning(result, prompt);
+        return;
+      }
+
+      // Auto-activate based on type
+      this.activateMod(result, prompt);
+    } catch (error) {
+      console.error("Generation error:", error);
+      // Remove generating entry and show error in HUD
+      this.modHUD.removeMod(tempModId);
+      this.modHUD.addErrorMod(prompt, error.message);
+    } finally {
+      this.isGenerating = false;
+    }
+  }
+
+  activateMod(result, originalPrompt) {
+    const modName = `mod_${Date.now()}`;
+
+    if (result.type === "server") {
+      // One-time server action
+      this.socket.emit("executeServerMod", {
+        code: result.code,
+        name: modName,
+      });
+      this.socket.once("serverModResult", (res) => {
+        if (res.success) {
+          // Server mods are instant, show brief notification in HUD
+          this.modHUD.addMod(originalPrompt, this.playerName, 3000);
+        } else {
+          this.modHUD.addErrorMod(originalPrompt, res.error);
+        }
+      });
+    } else if (result.type === "persistent") {
+      // Continuous server effect
+      this.socket.emit("activatePersistentMod", {
+        code: result.code,
+        durationMs: 30000,
+        name: modName,
+        description: originalPrompt,
+      });
+
+      this.socket.once("persistentModResult", (res) => {
+        if (res.success) {
+          this.modHUD.addMod(originalPrompt, this.playerName, res.duration);
+        } else {
+          this.modHUD.addErrorMod(originalPrompt, res.error);
+        }
+      });
+    } else {
+      // Client-side mod
+      const loadResult = this.modSystem.loadMod(modName, result.code);
+      if (loadResult.success) {
+        this.modHUD.addMod(originalPrompt, this.playerName, 30000);
+      } else {
+        this.modHUD.addErrorMod(originalPrompt, loadResult.message);
+      }
+    }
+  }
+
+  showBackfireWarning(result, originalPrompt) {
+    // Create dramatic backfire warning
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 0, 0, 0.3);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: backfireFlash 0.5s ease-in-out;
+    `;
+
+    const warningBox = document.createElement("div");
+    warningBox.style.cssText = `
+      background: linear-gradient(135deg, #660000 0%, #cc0000 100%);
+      border: 4px solid #ff3366;
+      border-radius: 8px;
+      padding: 40px;
+      max-width: 500px;
+      box-shadow: 0 0 50px rgba(255, 0, 0, 0.8);
+      animation: backfireShake 0.5s ease-in-out;
+      text-align: center;
+      font-family: monospace;
+    `;
+
+    warningBox.innerHTML = `
+      <div style="font-size: 80px; margin-bottom: 20px; animation: backfireSpin 1s ease-in-out;">⚠️</div>
+      <h2 style="color: #ffff00; font-size: 32px; margin: 0 0 20px 0; letter-spacing: 3px;">
+        BACKFIRE!
+      </h2>
+      <p style="color: #ffcccc; font-size: 16px; margin: 0 0 20px 0; line-height: 1.6;">
+        ${result.backfireMessage || "Your mod went terribly wrong!"}
+      </p>
+      <p style="color: #ffaaaa; font-size: 14px; margin: 0 0 30px 0; font-style: italic;">
+        This will probably not do what you expected...
+      </p>
+      <button id="acknowledgeBackfire" style="
+        background: linear-gradient(135deg, #ff3366 0%, #ff6699 100%);
+        border: 2px solid #ffaaaa;
+        color: white;
+        padding: 15px 40px;
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 6px;
+        font-family: monospace;
+        box-shadow: 0 4px 15px rgba(255, 51, 102, 0.4);
+        transition: all 0.3s;
+      " onmouseover="this.style.transform='scale(1.05)'"
+         onmouseout="this.style.transform='scale(1)'">
+        ACTIVATE ANYWAY
+      </button>
+    `;
+
+    overlay.appendChild(warningBox);
+    document.body.appendChild(overlay);
+
+    // Add animations
+    const style = document.createElement("style");
+    style.textContent = `
+      @keyframes backfireFlash {
+        0%, 100% { background: rgba(255, 0, 0, 0); }
+        50% { background: rgba(255, 0, 0, 0.5); }
+      }
+      @keyframes backfireShake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-10px) rotate(-2deg); }
+        75% { transform: translateX(10px) rotate(2deg); }
+      }
+      @keyframes backfireSpin {
+        0% { transform: rotate(0deg) scale(0.5); opacity: 0; }
+        50% { transform: rotate(180deg) scale(1.2); }
+        100% { transform: rotate(360deg) scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Play alarm sound
+    try {
+      const audio = new Audio(
+        "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg",
+      );
+      audio.volume = 0.3;
+      audio.play().catch(() => {});
+    } catch (e) {}
+
+    // Handle acknowledgment
+    document
+      .getElementById("acknowledgeBackfire")
+      .addEventListener("click", () => {
+        overlay.remove();
+        style.remove();
+        this.showStatus("// [WARNING] Backfire mod activating...", "#ff6600");
+        setTimeout(() => {
+          this.activateMod(result, originalPrompt);
+        }, 500);
+      });
+
+    // Click overlay to dismiss
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        document.getElementById("acknowledgeBackfire").click();
       }
     });
 
-    document.addEventListener("mouseup", () => {
-      isDragging = false;
-    });
+    // Reset input state
+    this.isGenerating = false;
+    this.input.disabled = false;
+    this.input.style.opacity = "1";
+  }
+
+  showStatus(message, color = "#00ff00") {
+    this.status.textContent = message;
+    this.status.style.color = color;
   }
 
   show() {
-    this.visible = true;
     this.container.style.display = "flex";
+    this.visible = true;
+    this.input.focus();
+    this.showStatus("// Ready", "#00ff00");
   }
 
   hide() {
-    this.visible = false;
     this.container.style.display = "none";
+    this.visible = false;
+    this.input.value = "";
+    this.input.disabled = false;
+    this.input.style.opacity = "1";
   }
 
   toggle() {
@@ -338,298 +409,9 @@ export class ModEditor {
 
   setSocket(socket) {
     this.socket = socket;
-    this.setupSocketListeners();
   }
 
   setPlayerName(name) {
     this.playerName = name;
-  }
-
-  setupSocketListeners() {
-    if (!this.socket) return;
-
-    this.socket.on("serverModResult", (data) => {
-      if (data.error) {
-        this.showStatus(`❌ Server Error: ${data.error}`, "#ff3366");
-        console.error("Server mod error:", data.stack);
-      } else {
-        this.showStatus(`✅ ${data.result}`, "#66ff66");
-      }
-    });
-
-    this.socket.on("serverModMessage", (data) => {
-      this.showStatus(`📢 ${data.message}`, "#ffaa00");
-    });
-
-    this.socket.on("serverModAction", (data) => {
-      const msg = `🔧 ${data.action}: ${data.targetName}`;
-      this.showStatus(msg, "#00aaff");
-    });
-  }
-
-  updateModTypeIndicator(type) {
-    const indicator = document.getElementById("modTypeIndicator");
-    if (!indicator) return;
-
-    if (type === "client") {
-      indicator.textContent = "CLIENT";
-      indicator.style.background = "#66ccff";
-      indicator.style.color = "#0a0a14";
-      indicator.style.border = "none";
-    } else if (type === "server") {
-      indicator.textContent = "SERVER";
-      indicator.style.background = "#ff9500";
-      indicator.style.color = "#0a0a14";
-      indicator.style.border = "none";
-    } else {
-      indicator.textContent = "AUTO-DETECT";
-      indicator.style.background = "rgba(102, 204, 255, 0.2)";
-      indicator.style.color = "#66ccff";
-      indicator.style.border = "1px solid #66ccff";
-    }
-  }
-
-  loadCurrentMod() {
-    const name = document.getElementById("modName").value.trim();
-    const code = this.textarea.value;
-
-    if (!name) {
-      this.showStatus("❌ Please enter a mod name", "#ff3366");
-      return;
-    }
-
-    // Use detected mod type from AI generation
-    if (this.detectedModType === "server") {
-      // Execute server-side mod
-      if (!this.socket) {
-        this.showStatus("❌ Not connected to server", "#ff3366");
-        return;
-      }
-
-      this.showStatus("⏳ Executing server mod...", "#ffaa00");
-      this.socket.emit("executeServerMod", { code, name });
-    } else {
-      // Load client-side mod (default if not specified)
-      const result = this.modSystem.loadMod(name, code);
-      if (result.success) {
-        this.showStatus(`✅ ${result.message}`, "#66ff66");
-
-        // Start 30-second auto-disable timer
-        this.startModTimer(name);
-
-        // Add to HUD display
-        this.modHUD.addMod(name, this.playerName, 30000);
-
-        // Save to server database for tracking
-        if (this.socket) {
-          this.socket.emit("saveClientMod", { name, code });
-        }
-      } else {
-        this.showStatus(`❌ ${result.message}`, "#ff3366");
-      }
-    }
-  }
-
-  reloadCurrentMod() {
-    const name = document.getElementById("modName").value.trim();
-    const code = this.textarea.value;
-
-    if (!name) {
-      this.showStatus("❌ Please enter a mod name", "#ff3366");
-      return;
-    }
-
-    if (this.detectedModType === "server") {
-      // Re-execute server-side mod
-      if (!this.socket) {
-        this.showStatus("❌ Not connected to server", "#ff3366");
-        return;
-      }
-
-      this.showStatus("⏳ Re-executing server mod...", "#ffaa00");
-      this.socket.emit("executeServerMod", { code, name });
-    } else {
-      // Reload client-side mod
-      const result = this.modSystem.reloadMod(name, code);
-      if (result.success) {
-        this.showStatus(`🔄 Mod "${name}" reloaded`, "#ffaa00");
-
-        // Restart 30-second auto-disable timer
-        this.startModTimer(name);
-      } else {
-        this.showStatus(`❌ ${result.message}`, "#ff3366");
-      }
-    }
-  }
-
-  startModTimer(name) {
-    // Clear existing timer if any
-    if (this.modTimers && this.modTimers[name]) {
-      clearTimeout(this.modTimers[name]);
-    }
-
-    // Initialize timers map if needed
-    if (!this.modTimers) {
-      this.modTimers = {};
-    }
-
-    // Set 30-second timer to auto-disable the mod
-    this.modTimers[name] = setTimeout(() => {
-      this.modSystem.unloadMod(name);
-      this.showStatus(`⏱️ Mod "${name}" auto-disabled after 30 seconds`, "#ffaa00");
-      // HUD will automatically remove the mod when timer expires
-      delete this.modTimers[name];
-    }, 30000);
-
-    console.log(`⏱️ Mod "${name}" will auto-disable in 30 seconds`);
-  }
-
-  unloadCurrentMod() {
-    const name = document.getElementById("modName").value.trim();
-
-    if (!name) {
-      this.showStatus("❌ Please enter a mod name", "#ff3366");
-      return;
-    }
-
-    if (this.detectedModType === "server") {
-      this.showStatus(
-        "⚠️ Server mods cannot be unloaded (restart required)",
-        "#ffaa00",
-      );
-    } else {
-      // Clear timer if exists
-      if (this.modTimers && this.modTimers[name]) {
-        clearTimeout(this.modTimers[name]);
-        delete this.modTimers[name];
-      }
-
-      this.modSystem.unloadMod(name);
-
-      // Remove from HUD
-      this.modHUD.removeMod(name);
-
-      this.showStatus(`🗑️ Mod "${name}" unloaded`, "#66ccff");
-    }
-  }
-
-  showStatus(message, color = "#66ccff") {
-    this.statusDiv.textContent = message;
-    this.statusDiv.style.color = color;
-  }
-
-  async loadAvailableMods() {
-    try {
-      const response = await fetch("/mods/mods.json");
-      if (!response.ok) return;
-
-      const data = await response.json();
-      const select = document.getElementById("modFileList");
-
-      data.mods.forEach((mod) => {
-        const option = document.createElement("option");
-        option.value = mod.file;
-        option.textContent = `${mod.name} - ${mod.description}`;
-        select.appendChild(option);
-      });
-    } catch (error) {
-      console.log("Could not load mods manifest:", error);
-    }
-  }
-
-  async loadSelectedFile() {
-    const select = document.getElementById("modFileList");
-    const filename = select.value;
-
-    if (!filename) {
-      this.showStatus("❌ Please select a mod file", "#ff3366");
-      return;
-    }
-
-    try {
-      const response = await fetch(`/mods/${filename}`);
-      if (!response.ok) {
-        throw new Error("Failed to load mod file");
-      }
-
-      const code = await response.text();
-      const modName = filename.replace(".js", "");
-
-      // Update UI
-      document.getElementById("modName").value = modName;
-      this.textarea.value = code;
-
-      // Load the mod
-      const result = this.modSystem.loadMod(modName, code);
-      if (result.success) {
-        this.showStatus(`✅ Loaded ${modName} from file`, "#66ff66");
-      } else {
-        this.showStatus(`❌ ${result.message}`, "#ff3366");
-      }
-    } catch (error) {
-      this.showStatus(`❌ Error loading file: ${error.message}`, "#ff3366");
-    }
-  }
-
-  async generateCode() {
-    if (this.isGenerating) {
-      this.showStatus("⏳ Already generating code...", "#ffaa00");
-      return;
-    }
-
-    const userPrompt = this.textarea.value.trim();
-
-    if (!userPrompt) {
-      this.showStatus(
-        "❌ Please enter a description of what you want the mod to do",
-        "#ff3366",
-      );
-      return;
-    }
-
-    const generateButton = document.getElementById("generateCode");
-    const originalButtonText = generateButton.innerHTML;
-
-    try {
-      this.isGenerating = true;
-
-      // Update button state
-      generateButton.innerHTML = "⏳ GENERATING...";
-      generateButton.style.background =
-        "linear-gradient(135deg, #ffaa00 0%, #ff8800 100%)";
-      generateButton.disabled = true;
-      generateButton.style.cursor = "not-allowed";
-
-      this.showStatus("🤖 Generating code with AI...", "#ffaa00");
-
-      // Call Gemini API
-      const result = await this.geminiClient.generateModCode(userPrompt);
-
-      // Update textarea with generated code
-      this.textarea.value = result.code;
-
-      // Store detected mod type
-      this.detectedModType = result.type;
-      this.updateModTypeIndicator(result.type);
-
-      this.showStatus(
-        `✅ Code generated successfully! Detected as ${result.type.toUpperCase()} mod. Click LOAD MOD to test.`,
-        "#66ff66",
-      );
-    } catch (error) {
-      console.error("Code generation error:", error);
-
-      // Show the actual error message from the server
-      this.showStatus(`❌ ${error.message}`, "#ff3366");
-    } finally {
-      this.isGenerating = false;
-
-      // Restore button state
-      generateButton.innerHTML = originalButtonText;
-      generateButton.style.background =
-        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
-      generateButton.disabled = false;
-      generateButton.style.cursor = "pointer";
-    }
   }
 }

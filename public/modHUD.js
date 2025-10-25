@@ -155,6 +155,101 @@ export class ModHUD {
     this.updateCount();
   }
 
+  addGeneratingMod(modId, prompt, playerName) {
+    // Create mod entry element with generating state
+    const modElement = document.createElement("div");
+    modElement.style.cssText = `
+      background: rgba(255, 170, 0, 0.1);
+      border-left: 3px solid #ffaa00;
+      padding: 8px;
+      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    `;
+
+    // Mod name with loading animation
+    const nameDiv = document.createElement("div");
+    nameDiv.style.cssText = `
+      color: #ffaa00;
+      font-weight: bold;
+      font-size: 11px;
+    `;
+    nameDiv.textContent = prompt;
+
+    // Status
+    const statusDiv = document.createElement("div");
+    statusDiv.style.cssText = `
+      color: #ffaa00;
+      font-size: 10px;
+      font-style: italic;
+    `;
+    statusDiv.textContent = "⚡ Generating with AI...";
+
+    modElement.appendChild(nameDiv);
+    modElement.appendChild(statusDiv);
+
+    this.listContainer.insertBefore(modElement, this.listContainer.firstChild);
+
+    // Store temporary mod data
+    this.activeMods.set(modId, {
+      playerName,
+      element: modElement,
+      isGenerating: true,
+    });
+
+    this.updateVisibility();
+    this.updateCount();
+  }
+
+  addErrorMod(prompt, errorMessage) {
+    // Create mod entry element with error state
+    const modElement = document.createElement("div");
+    modElement.style.cssText = `
+      background: rgba(255, 51, 102, 0.1);
+      border-left: 3px solid #ff3366;
+      padding: 8px;
+      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    `;
+
+    // Mod name
+    const nameDiv = document.createElement("div");
+    nameDiv.style.cssText = `
+      color: #ff3366;
+      font-weight: bold;
+      font-size: 11px;
+    `;
+    nameDiv.textContent = prompt;
+
+    // Error message
+    const errorDiv = document.createElement("div");
+    errorDiv.style.cssText = `
+      color: #ff6699;
+      font-size: 10px;
+    `;
+    errorDiv.textContent = `❌ ${errorMessage}`;
+
+    modElement.appendChild(nameDiv);
+    modElement.appendChild(errorDiv);
+
+    this.listContainer.insertBefore(modElement, this.listContainer.firstChild);
+
+    // Store error mod data with 5 second auto-remove
+    const errorId = `error_${Date.now()}`;
+    const expiresAt = Date.now() + 5000;
+    this.activeMods.set(errorId, {
+      element: modElement,
+      expiresAt,
+      isError: true,
+    });
+
+    this.updateVisibility();
+    this.updateCount();
+  }
+
   removeMod(modName) {
     const modData = this.activeMods.get(modName);
     if (modData) {
@@ -195,6 +290,21 @@ export class ModHUD {
       const toRemove = [];
 
       this.activeMods.forEach((modData, modName) => {
+        // Skip generating mods (no timer)
+        if (modData.isGenerating) {
+          return;
+        }
+
+        // Handle error mods with expiration
+        if (modData.isError) {
+          const remaining = modData.expiresAt - now;
+          if (remaining <= 0) {
+            toRemove.push(modName);
+          }
+          return;
+        }
+
+        // Handle normal mods with timers
         const remaining = modData.expiresAt - now;
 
         if (remaining <= 0) {
