@@ -48,7 +48,12 @@ function generatePlayerName() {
   return `${adj}${noun}${num}`;
 }
 
-let playerName = generatePlayerName();
+// Load player name from localStorage or generate new one
+let playerName = localStorage.getItem("playerName") || generatePlayerName();
+// Save to localStorage if it was generated
+if (!localStorage.getItem("playerName")) {
+  localStorage.setItem("playerName", playerName);
+}
 let isSpectator = true; // Start as spectator
 
 // Smooth camera for spectator mode
@@ -67,6 +72,7 @@ const modSystem = new ModSystem({
   getPlayerName: () => playerName,
   setPlayerName: (name) => {
     playerName = name;
+    localStorage.setItem("playerName", name);
   },
 });
 
@@ -285,6 +291,117 @@ canvas.addEventListener("mousemove", (e) => {
 
 // Prevent context menu
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+// Game Menu System
+const gameMenu = document.getElementById("gameMenu");
+const controlsScreen = document.getElementById("controlsScreen");
+const playerNameInput = document.getElementById("playerNameInput");
+const saveNameButton = document.getElementById("saveNameButton");
+const spectateButton = document.getElementById("spectateButton");
+const controlsButton = document.getElementById("controlsButton");
+const closeControlsButton = document.getElementById("closeControlsButton");
+
+let isMenuOpen = false;
+
+function toggleGameMenu() {
+  isMenuOpen = !isMenuOpen;
+  gameMenu.style.display = isMenuOpen ? "flex" : "none";
+  controlsScreen.style.display = "none";
+
+  // Populate name input with current name when opening
+  if (isMenuOpen) {
+    playerNameInput.value = playerName;
+    playerNameInput.focus();
+    playerNameInput.select();
+  }
+}
+
+function showControlsScreen() {
+  gameMenu.style.display = "none";
+  controlsScreen.style.display = "flex";
+}
+
+function closeControlsScreen() {
+  controlsScreen.style.display = "none";
+  gameMenu.style.display = "flex";
+}
+
+// ESC key handler
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    // If controls screen is open, go back to menu
+    if (controlsScreen.style.display === "flex") {
+      closeControlsScreen();
+    }
+    // Otherwise toggle the main menu
+    else {
+      toggleGameMenu();
+    }
+  }
+});
+
+// Save name button
+saveNameButton.addEventListener("click", () => {
+  const newName = playerNameInput.value.trim();
+  if (newName && newName.length > 0) {
+    modSystem.setPlayerName(newName);
+    console.log(`✅ Name changed to: ${newName}`);
+
+    // Show feedback
+    saveNameButton.textContent = "SAVED!";
+    saveNameButton.style.background = "#66ccff";
+    setTimeout(() => {
+      saveNameButton.textContent = "SAVE NAME";
+      saveNameButton.style.background = "";
+    }, 1000);
+  }
+});
+
+// Enter key in name input
+playerNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    saveNameButton.click();
+  }
+});
+
+// Spectate button
+spectateButton.addEventListener("click", () => {
+  if (!isSpectator) {
+    // Disconnect player and reconnect as spectator
+    socket.disconnect();
+    playerId = null;
+    isSpectator = true;
+
+    // Reconnect as spectator
+    setTimeout(() => {
+      socket.connect();
+      console.log("👻 Switched to spectator mode");
+    }, 100);
+
+    // Show spectator overlay again
+    const spectatorOverlay = document.getElementById("spectatorOverlay");
+    if (spectatorOverlay) {
+      spectatorOverlay.style.display = "block";
+    }
+
+    // Reset join button
+    joinButton.disabled = false;
+    joinButton.textContent = "JOIN GAME";
+  }
+
+  // Close menu
+  toggleGameMenu();
+});
+
+// Controls button
+controlsButton.addEventListener("click", () => {
+  showControlsScreen();
+});
+
+// Close controls button
+closeControlsButton.addEventListener("click", () => {
+  closeControlsScreen();
+});
 
 // Socket connection events
 socket.on("connect", () => {
