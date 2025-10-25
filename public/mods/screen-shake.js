@@ -39,6 +39,9 @@ registerHook('onShoot', (data) => {
 
 registerHook('onRender', (ctx, camera, dt) => {
   if (shakeIntensity > 0.1) {
+    // Save canvas state before applying shake
+    ctx.save();
+
     // Apply shake to camera
     const shakeX = (Math.random() - 0.5) * shakeIntensity;
     const shakeY = (Math.random() - 0.5) * shakeIntensity;
@@ -47,6 +50,9 @@ registerHook('onRender', (ctx, camera, dt) => {
 
     // Decay shake
     shakeIntensity *= shakeDecay;
+
+    // Restore canvas state after shake is applied
+    ctx.restore();
   }
 });
 
