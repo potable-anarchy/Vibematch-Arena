@@ -4,9 +4,22 @@
  */
 
 import os from "os";
+import Database from "better-sqlite3";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class PerformanceMonitor {
   constructor() {
+    // Initialize SQLite database
+    this.db = new Database(path.join(__dirname, "metrics.db"));
+    this.initializeDatabase();
+
+    // Start cleanup job (runs every hour)
+    setInterval(() => this.cleanupOldMetrics(), 3600000); // 1 hour
+
     // SLO Definitions (Service Level Objectives)
     this.SLOs = {
       gameLoop: {
@@ -125,6 +138,203 @@ class PerformanceMonitor {
   }
 
   /**
+   * Initialize SQLite database schema
+   */
+  initializeDatabase() {
+    // Create metrics table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS metrics_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER NOT NULL,
+
+        -- Game Loop Metrics
+        tick_time REAL,
+        avg_tick_time REAL,
+        max_tick_time REAL,
+        ticks_per_second INTEGER,
+        tick_p50 REAL,
+        tick_p95 REAL,
+        tick_p99 REAL,
+        slow_ticks INTEGER,
+
+        -- System Metrics
+        memory_usage_mb REAL,
+        heap_used_mb REAL,
+        heap_total_mb REAL,
+        cpu_usage REAL,
+
+        -- Game State
+        player_count INTEGER,
+        bot_count INTEGER,
+        projectile_count INTEGER,
+        pickup_count INTEGER,
+
+        -- Network Metrics
+        active_connections INTEGER,
+        messages_per_second INTEGER,
+        bytes_per_second INTEGER,
+
+        -- API Metrics
+        api_requests_per_second INTEGER,
+        api_avg_response_time REAL,
+        api_p50 REAL,
+        api_p95 REAL,
+        api_p99 REAL,
+        api_error_rate REAL,
+
+        -- SLI/SLO Status
+        game_loop_compliance REAL,
+        api_latency_compliance REAL,
+        error_rate_compliance INTEGER,
+        overall_health REAL
+      );
+
+      -- Index for efficient time-based queries
+      CREATE INDEX IF NOT EXISTS idx_timestamp ON metrics_snapshots(timestamp);
+    `);
+
+    console.log("✅ Metrics database initialized");
+  }
+
+  /**
+   * Save current metrics snapshot to database
+   */
+  saveMetricsSnapshot() {
+    const stmt = this.db.prepare(`
+      INSERT INTO metrics_snapshots (
+        timestamp, tick_time, avg_tick_time, max_tick_time, ticks_per_second,
+        tick_p50, tick_p95, tick_p99, slow_ticks,
+        memory_usage_mb, heap_used_mb, heap_total_mb, cpu_usage,
+        player_count, bot_count, projectile_count, pickup_count,
+        active_connections, messages_per_second, bytes_per_second,
+        api_requests_per_second, api_avg_response_time, api_p50, api_p95, api_p99, api_error_rate,
+        game_loop_compliance, api_latency_compliance, error_rate_compliance, overall_health
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+    `);
+
+    try {
+      stmt.run(
+        Date.now(),
+        this.metrics.gameLoop.tickTime,
+        this.metrics.gameLoop.avgTickTime,
+        this.metrics.gameLoop.maxTickTime,
+        this.metrics.gameLoop.ticksPerSecond,
+        this.metrics.gameLoop.p50,
+        this.metrics.gameLoop.p95,
+        this.metrics.gameLoop.p99,
+        this.metrics.gameLoop.slowTicks,
+        this.metrics.system.memoryUsageMB,
+        this.metrics.system.heapUsedMB,
+        this.metrics.system.heapTotalMB,
+        this.metrics.system.cpuUsage,
+        this.metrics.gameState.playerCount,
+        this.metrics.gameState.botCount,
+        this.metrics.gameState.projectileCount,
+        this.metrics.gameState.pickupCount,
+        this.metrics.network.activeConnections,
+        this.metrics.network.messagesPerSecond,
+        this.metrics.network.bytesPerSecond,
+        this.metrics.api.requestsPerSecond,
+        this.metrics.api.avgResponseTime,
+        this.metrics.api.p50,
+        this.metrics.api.p95,
+        this.metrics.api.p99,
+        this.metrics.api.errorRate,
+        this.metrics.sli.gameLoopCompliance,
+        this.metrics.sli.apiLatencyCompliance,
+        this.metrics.sli.errorRateCompliance ? 1 : 0,
+        this.metrics.sli.overallHealth,
+      );
+    } catch (error) {
+      console.error("❌ Error saving metrics snapshot:", error);
+    }
+  }
+
+  /**
+   * Clean up metrics older than 48 hours
+   */
+  cleanupOldMetrics() {
+    const cutoffTime = Date.now() - 48 * 60 * 60 * 1000; // 48 hours ago
+
+    try {
+      const stmt = this.db.prepare(
+        "DELETE FROM metrics_snapshots WHERE timestamp < ?",
+      );
+      const result = stmt.run(cutoffTime);
+
+      if (result.changes > 0) {
+        console.log(`🧹 Cleaned up ${result.changes} old metric records`);
+      }
+    } catch (error) {
+      console.error("❌ Error cleaning up metrics:", error);
+    }
+  }
+
+  /**
+   * Get historical metrics within time range
+   * @param {number} startTime - Start timestamp (ms)
+   * @param {number} endTime - End timestamp (ms)
+   * @returns {Array} Array of metric snapshots
+   */
+  getHistoricalMetrics(startTime, endTime = Date.now()) {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT * FROM metrics_snapshots
+        WHERE timestamp BETWEEN ? AND ?
+        ORDER BY timestamp ASC
+      `);
+      return stmt.all(startTime, endTime);
+    } catch (error) {
+      console.error("❌ Error fetching historical metrics:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get metrics aggregated by time bucket (for downsampling)
+   * @param {string} interval - '5m', '15m', '1h', '6h'
+   * @returns {Array} Aggregated metrics
+   */
+  getAggregatedMetrics(interval = "1h") {
+    const intervalMs =
+      {
+        "5m": 5 * 60 * 1000,
+        "15m": 15 * 60 * 1000,
+        "1h": 60 * 60 * 1000,
+        "6h": 6 * 60 * 60 * 1000,
+      }[interval] || 3600000;
+
+    const cutoffTime = Date.now() - 48 * 60 * 60 * 1000;
+
+    try {
+      const stmt = this.db.prepare(`
+        SELECT
+          (timestamp / ?) * ? as bucket_timestamp,
+          AVG(avg_tick_time) as avg_tick_time,
+          MAX(max_tick_time) as max_tick_time,
+          AVG(tick_p95) as avg_tick_p95,
+          AVG(memory_usage_mb) as avg_memory_mb,
+          AVG(cpu_usage) as avg_cpu,
+          AVG(player_count + bot_count) as avg_total_players,
+          AVG(api_avg_response_time) as avg_api_time,
+          AVG(overall_health) as avg_health,
+          COUNT(*) as sample_count
+        FROM metrics_snapshots
+        WHERE timestamp > ?
+        GROUP BY bucket_timestamp
+        ORDER BY bucket_timestamp ASC
+      `);
+
+      return stmt.all(intervalMs, intervalMs, cutoffTime);
+    } catch (error) {
+      console.error("❌ Error fetching aggregated metrics:", error);
+      return [];
+    }
+  }
+
+  /**
    * Start collecting system-level metrics
    */
   startSystemMetrics() {
@@ -134,6 +344,11 @@ class PerformanceMonitor {
       this.updateRateMetrics();
       this.updateHistory();
     }, 1000);
+
+    // Save metrics snapshot to database every minute
+    setInterval(() => {
+      this.saveMetricsSnapshot();
+    }, 60000); // 1 minute
   }
 
   /**

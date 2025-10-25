@@ -83,6 +83,33 @@ app.get("/api/metrics/summary", (req, res) => {
   performanceMonitor.endRequest(requestId);
 });
 
+// Historical metrics endpoint
+app.get("/api/metrics/history", (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()}`;
+  performanceMonitor.startRequest(requestId, "/api/metrics/history");
+
+  const hours = parseInt(req.query.hours) || 48;
+  const startTime = Date.now() - hours * 60 * 60 * 1000;
+
+  const history = performanceMonitor.getHistoricalMetrics(startTime);
+  res.json({ data: history, count: history.length });
+
+  performanceMonitor.endRequest(requestId);
+});
+
+// Aggregated metrics endpoint
+app.get("/api/metrics/aggregated", (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()}`;
+  performanceMonitor.startRequest(requestId, "/api/metrics/aggregated");
+
+  const interval = req.query.interval || "1h"; // 5m, 15m, 1h, 6h
+  const aggregated = performanceMonitor.getAggregatedMetrics(interval);
+
+  res.json({ data: aggregated, interval, count: aggregated.length });
+
+  performanceMonitor.endRequest(requestId);
+});
+
 // Middleware
 app.use(express.static(join(__dirname, "public")));
 app.use(express.json()); // Parse JSON request bodies
