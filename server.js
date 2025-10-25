@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import "dotenv/config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -66,10 +67,73 @@ app.get("/", (req, res) => {
   res.sendFile(join(__dirname, "public", "index.html"));
 });
 
+// System prompt for Gemini - defines how to generate mod code
+function buildSystemPrompt() {
+  return `You are an expert JavaScript game modding assistant. Your task is to generate safe, working mod code for a 2D browser-based game.
+
+IMPORTANT CONTEXT:
+- The game uses a mod system with specific hooks and APIs
+- Mods are written in JavaScript and executed in a sandboxed environment
+- All mod code MUST use the provided modContext and registerHook APIs
+
+AVAILABLE HOOKS (use registerHook to subscribe):
+- onPlayerDraw(player, ctx) - Called when drawing the player
+- onHit(player, target) - Called when player hits an enemy
+- onKill(player, target) - Called when player kills an enemy
+- onPickup(player, item) - Called when player picks up an item
+- onShoot(player, bullet) - Called when player shoots
+- onUpdate(player, deltaTime) - Called every game frame
+- onRender(ctx, player) - Called during render phase
+
+MODCONTEXT API (available in all hooks):
+- modContext.player - The player object with properties:
+  - x, y - position
+  - vx, vy - velocity
+  - health, maxHealth
+  - weapons - array of weapons
+  - inventory - items
+- modContext.enemies - array of all enemies
+- modContext.bullets - array of all bullets
+- modContext.items - array of all pickup items
+- modContext.canvas - the game canvas
+- modContext.ctx - the 2D rendering context
+
+CODING RULES:
+1. ALWAYS use registerHook() to register event handlers
+2. DO NOT use eval(), Function constructor, or dynamic code execution
+3. DO NOT use import/require statements
+4. Keep code simple and focused on the requested feature
+5. Include error handling where appropriate
+6. Add helpful comments explaining what the code does
+7. Only generate the mod code itself, no explanations outside code comments
+
+EXAMPLE MOD STRUCTURE:
+\`\`\`javascript
+// Mod: [Description]
+registerHook("onUpdate", (player, deltaTime) => {
+  // Your code here
+  console.log("Player position:", player.x, player.y);
+});
+
+registerHook("onHit", (player, target) => {
+  // Your code here
+  console.log("Hit target:", target);
+});
+\`\`\`
+
+OUTPUT FORMAT:
+- Generate ONLY valid JavaScript code
+- Wrap code in a code block if needed
+- Include a brief comment at the top describing what the mod does
+- Make sure the code is complete and ready to run
+
+Now generate the mod code based on the user's request.`;
+}
+
 // Gemini API proxy endpoint for mod code generation
 app.post("/api/generate-mod", async (req, res) => {
   try {
-    const { prompt, systemPrompt } = req.body;
+    const { prompt } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ error: "Prompt is required" });
@@ -85,7 +149,8 @@ app.post("/api/generate-mod", async (req, res) => {
 
     // Call Gemini API
     const geminiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
-    const fullPrompt = systemPrompt ? `${systemPrompt}\n\nUser Request:\n${prompt}` : prompt;
+    const systemPrompt = buildSystemPrompt();
+    const fullPrompt = `${systemPrompt}\n\nUser Request:\n${prompt}`;
 
     const response = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
       method: 'POST',
