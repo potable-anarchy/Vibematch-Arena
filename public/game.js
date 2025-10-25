@@ -129,7 +129,7 @@ async function autoLoadMods() {
     }
 
     // Enable hot-reload for live-coding
-    modSystem.enableHotReload(2000); // Check every 2 seconds
+    // modSystem.enableHotReload(2000); // Disabled - causing CORS issues
   } catch (error) {
     console.log("Could not auto-load mods:", error);
   }
@@ -930,16 +930,10 @@ function drawPlayer(p) {
   ctx.rotate(p.aimAngle);
 
   if (sprite && sprite.complete) {
-    // Draw shadow first
-    ctx.globalAlpha = 0.3;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(
-      -sprite.width / 2 + 2,
-      -sprite.height / 2 + 2,
-      sprite.width,
-      sprite.height,
-    );
-    ctx.globalAlpha = 1;
+    // Scale down the sprite (0.3 = 30% of original size)
+    const scale = 0.3;
+    const scaledWidth = sprite.width * scale;
+    const scaledHeight = sprite.height * scale;
 
     // Draw invulnerability effect
     if (p.invulnerable) {
@@ -947,10 +941,10 @@ function drawPlayer(p) {
       ctx.lineWidth = 3;
       ctx.setLineDash([5, 5]);
       ctx.strokeRect(
-        -sprite.width / 2 - 5,
-        -sprite.height / 2 - 5,
-        sprite.width + 10,
-        sprite.height + 10,
+        -scaledWidth / 2 - 5,
+        -scaledHeight / 2 - 5,
+        scaledWidth + 10,
+        scaledHeight + 10,
       );
       ctx.setLineDash([]);
     }
@@ -973,8 +967,8 @@ function drawPlayer(p) {
     tintCtx.globalCompositeOperation = 'destination-in';
     tintCtx.drawImage(sprite, 0, 0);
 
-    // Draw tinted player sprite
-    ctx.drawImage(tintCanvas, -sprite.width / 2, -sprite.height / 2);
+    // Draw tinted player sprite with scaling
+    ctx.drawImage(tintCanvas, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
   } else {
     // Fallback to circle if sprite not loaded
     const radius = gameConfig?.PLAYER_RADIUS || 20;

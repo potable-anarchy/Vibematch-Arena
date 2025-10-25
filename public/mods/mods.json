@@ -25,6 +25,12 @@
       "enabled": true
     },
     {
+      "name": "Sound Effects",
+      "file": "sound-effects.js",
+      "description": "Adds gunfire, hit, and death sound effects with distance-based volume",
+      "enabled": true
+    },
+    {
       "name": "Killstreak Announcer",
       "file": "killstreak-announcer.js",
       "description": "Announces killstreaks with big text (3, 5, 7, 10, 15 kills)",
