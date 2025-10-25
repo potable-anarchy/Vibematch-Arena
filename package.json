@@ -1,7 +1,7 @@
 {
-  "name": "deathmatch-arena",
+  "name": "vibematch-arena",
   "version": "1.0.0",
-  "description": "Fast-paced top-down multiplayer deathmatch shooter",
+  "description": "Fast-paced top-down multiplayer shooter",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "game",
     "multiplayer",
     "shooter",
-    "deathmatch"
+    "vibematch"
   ],
   "author": "Brad",
   "license": "MIT",

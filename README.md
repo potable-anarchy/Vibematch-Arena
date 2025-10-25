@@ -1,6 +1,6 @@
-# Deathmatch Arena
+# Vibematch Arena
 
-A fast-paced, top-down multiplayer deathmatch shooter inspired by Hotline Miami and classic arena shooters like Doom.
+A fast-paced, top-down multiplayer shooter inspired by Hotline Miami and classic arena shooters like Doom.
 
 ## Features
 
@@ -37,8 +37,8 @@ A fast-paced, top-down multiplayer deathmatch shooter inspired by Hotline Miami 
 docker-compose up --build
 
 # Or with plain Docker
-docker build -t deathmatch-arena .
-docker run -p 3000:3000 deathmatch-arena
+docker build -t vibematch-arena .
+docker run -p 3000:3000 vibematch-arena
 ```
 
 ### Option 2: Node.js
