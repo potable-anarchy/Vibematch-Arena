@@ -385,24 +385,40 @@ setInterval(() => {
 
 // Update HUD
 function updateHUD() {
-  const player = gameState.players.find((p) => p.id === playerId);
-  if (!player) return;
+  let displayPlayer = gameState.players.find((p) => p.id === playerId);
+
+  // If spectating, show the top scorer's stats instead
+  if (!displayPlayer && isSpectator) {
+    let topScorer = null;
+    let topKills = -1;
+
+    for (const p of gameState.players) {
+      if (p.health > 0 && p.kills > topKills) {
+        topKills = p.kills;
+        topScorer = p;
+      }
+    }
+
+    displayPlayer = topScorer;
+  }
+
+  if (!displayPlayer) return;
 
   // Health
-  healthBar.style.width = `${player.health}%`;
-  healthText.textContent = Math.ceil(player.health);
+  healthBar.style.width = `${displayPlayer.health}%`;
+  healthText.textContent = Math.ceil(displayPlayer.health);
 
   // Armor
-  armorBar.style.width = `${player.armor}%`;
-  armorText.textContent = Math.ceil(player.armor);
+  armorBar.style.width = `${displayPlayer.armor}%`;
+  armorText.textContent = Math.ceil(displayPlayer.armor);
 
   // Weapon
-  weaponName.textContent = player.weapon.toUpperCase();
-  ammoCount.textContent = `${player.ammo} / ${weapons[player.weapon].mag}`;
-  reloadIndicator.style.display = player.reloading ? "block" : "none";
+  weaponName.textContent = displayPlayer.weapon.toUpperCase();
+  ammoCount.textContent = `${displayPlayer.ammo} / ${weapons[displayPlayer.weapon].mag}`;
+  reloadIndicator.style.display = displayPlayer.reloading ? "block" : "none";
 
-  // Respawn
-  if (player.health <= 0) {
+  // Respawn (only show for own player)
+  if (displayPlayer.id === playerId && displayPlayer.health <= 0) {
     respawnMessage.style.display = "block";
     respawnTimer.textContent = "Respawning...";
   }
