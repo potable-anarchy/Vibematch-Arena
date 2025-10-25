@@ -306,10 +306,20 @@
             <!-- Time Range Selector -->
             <div class="time-range-selector">
                 <div class="time-range-presets">
-                    <button class="time-btn active" data-range="live">
+                    <button class="time-btn live-toggle active" id="liveToggle">
                         🔴 Live
                     </button>
-                    <button class="time-btn" data-range="1m">1 Min</button>
+                    <div
+                        style="
+                            width: 2px;
+                            height: 30px;
+                            background: #2a3f5f;
+                            margin: 0 10px;
+                        "
+                    ></div>
+                    <button class="time-btn active" data-range="1m">
+                        1 Min
+                    </button>
                     <button class="time-btn" data-range="5m">5 Min</button>
                     <button class="time-btn" data-range="1h">1 Hour</button>
                     <button class="time-btn" data-range="12h">12 Hours</button>
@@ -335,7 +345,6 @@
                     </button>
                 </div>
                 <div class="range-info">
-                    <span id="rangeDisplay">Showing: Last 24 hours</span>
                     <span id="dataPoints"></span>
                 </div>
             </div>
@@ -463,6 +472,20 @@
                 <canvas id="player-chart"></canvas>
             </div>
 
+            <div class="chart-container">
+                <h3>
+                    <span class="status-indicator good"></span>Ticks Per Second
+                </h3>
+                <canvas id="ticks-chart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <h3>
+                    <span class="status-indicator good"></span>Game Statistics
+                </h3>
+                <canvas id="game-stats-chart"></canvas>
+            </div>
+
             <!-- API Endpoints Table -->
             <div class="endpoint-table">
                 <h3>API Endpoint Performance</h3>
@@ -585,6 +608,122 @@
                 },
             );
 
+            const ticksChart = new Chart(
+                document.getElementById("ticks-chart"),
+                {
+                    ...chartConfig,
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: "Ticks/Sec",
+                                data: [],
+                                borderColor: "#9C27B0",
+                                backgroundColor: "rgba(156, 39, 176, 0.1)",
+                                fill: true,
+                            },
+                        ],
+                    },
+                },
+            );
+
+            const gameStatsChart = new Chart(
+                document.getElementById("game-stats-chart"),
+                {
+                    type: "line",
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: "Damage/Sec",
+                                data: [],
+                                borderColor: "#F44336",
+                                backgroundColor: "rgba(244, 67, 54, 0.1)",
+                                fill: false,
+                                yAxisID: "y",
+                                tension: 0.4,
+                            },
+                            {
+                                label: "Projectile Count",
+                                data: [],
+                                borderColor: "#FF9800",
+                                backgroundColor: "rgba(255, 152, 0, 0.1)",
+                                fill: false,
+                                yAxisID: "y1",
+                                tension: 0.4,
+                            },
+                            {
+                                label: "Deaths/Sec",
+                                data: [],
+                                borderColor: "#9C27B0",
+                                backgroundColor: "rgba(156, 39, 176, 0.1)",
+                                fill: false,
+                                yAxisID: "y1",
+                                tension: 0.4,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: "index",
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    color: "#888",
+                                },
+                            },
+                        },
+                        scales: {
+                            x: {
+                                display: false,
+                            },
+                            y: {
+                                type: "linear",
+                                display: true,
+                                position: "left",
+                                title: {
+                                    display: true,
+                                    text: "Damage/Sec",
+                                    color: "#F44336",
+                                },
+                                grid: {
+                                    color: "#2a3f5f",
+                                },
+                                ticks: {
+                                    color: "#F44336",
+                                },
+                            },
+                            y1: {
+                                type: "linear",
+                                display: true,
+                                position: "right",
+                                title: {
+                                    display: true,
+                                    text: "Count",
+                                    color: "#FF9800",
+                                },
+                                grid: {
+                                    drawOnChartArea: false,
+                                },
+                                ticks: {
+                                    color: "#FF9800",
+                                },
+                            },
+                        },
+                        elements: {
+                            point: {
+                                radius: 0,
+                            },
+                        },
+                    },
+                },
+            );
+
             // Utility functions
             function formatBytes(bytes) {
                 if (bytes === 0) return "0 B";
@@ -614,6 +753,11 @@
 
             function updateMetricValue(id, value, thresholds) {
                 const element = document.getElementById(id);
+                if (!element) {
+                    console.warn(`Element with id '${id}' not found`);
+                    return;
+                }
+
                 element.textContent = value;
 
                 // Update color based on thresholds
@@ -746,6 +890,17 @@
                     );
                     playerChart.update("none");
 
+                    // Ticks per second chart
+                    if (ticksChart.data.labels.length >= maxDataPoints) {
+                        ticksChart.data.labels.shift();
+                        ticksChart.data.datasets[0].data.shift();
+                    }
+                    ticksChart.data.labels.push("");
+                    ticksChart.data.datasets[0].data.push(
+                        metrics.gameLoop.ticksPerSecond,
+                    );
+                    ticksChart.update("none");
+
                     // Update API endpoint table
                     const tbody = document.getElementById("endpoint-tbody");
                     tbody.innerHTML = "";
@@ -772,7 +927,10 @@
             }
 
             // Connect to WebSocket for real-time updates
-            const socket = io("/performance");
+            const socket = io("/performance", {
+                transports: ["websocket", "polling"],
+                upgrade: true,
+            });
 
             socket.on("connect", () => {
                 console.log("Connected to performance metrics stream");
@@ -780,20 +938,28 @@
                     "Real-time performance metrics (WebSocket connected)";
             });
 
-            socket.on("disconnect", () => {
-                console.log("Disconnected from performance metrics stream");
+            socket.on("connect_error", (error) => {
+                console.error("WebSocket connection error:", error);
+            });
+
+            socket.on("disconnect", (reason) => {
+                console.log(
+                    "Disconnected from performance metrics stream:",
+                    reason,
+                );
                 document.querySelector(".subtitle").textContent =
                     "Real-time performance metrics (WebSocket disconnected)";
             });
 
-            socket.on("metrics", (metrics) => {
-                // Only update if in live mode
-                if (!isLiveMode) return;
+            // Process metrics updates (used by both WebSocket and initial load)
+            function processMetricsUpdate(metrics) {
+                // In custom range mode, don't update at all (static view)
+                if (isCustomRange) return;
 
                 // Update game loop metrics
                 updateMetricValue(
                     "tick-time",
-                    metrics.gameLoop.avgTickTime.toFixed(2),
+                    (metrics.gameLoop.avgTickTime || 0).toFixed(2),
                     {
                         warning: 16.67,
                         danger: 20,
@@ -801,11 +967,11 @@
                 );
                 updateMetricValue(
                     "ticks-per-sec",
-                    metrics.gameLoop.ticksPerSecond,
+                    metrics.gameLoop.ticksPerSecond || 0,
                 );
                 updateMetricValue(
                     "max-tick-time",
-                    metrics.gameLoop.maxTickTime.toFixed(2) + "ms",
+                    (metrics.gameLoop.maxTickTime || 0).toFixed(2) + "ms",
                 );
 
                 // Update system metrics
@@ -856,40 +1022,64 @@
                 );
 
                 // Update charts
-                const maxDataPoints = 60;
+                const now = Date.now();
 
-                // Tick time chart
-                if (tickChart.data.labels.length >= maxDataPoints) {
-                    tickChart.data.labels.shift();
-                    tickChart.data.datasets[0].data.shift();
-                }
-                tickChart.data.labels.push("");
+                // Only append new data if live updates are enabled and not in custom range mode
+                if (!isLiveMode || isCustomRange) return;
+
+                // Append new data to charts
+                tickChart.data.labels.push(now);
                 tickChart.data.datasets[0].data.push(
-                    metrics.gameLoop.avgTickTime,
+                    metrics.gameLoop.avgTickTime ?? null,
                 );
-                tickChart.update("none");
 
-                // Memory chart
-                if (memoryChart.data.labels.length >= maxDataPoints) {
-                    memoryChart.data.labels.shift();
-                    memoryChart.data.datasets[0].data.shift();
-                }
-                memoryChart.data.labels.push("");
+                memoryChart.data.labels.push(now);
                 memoryChart.data.datasets[0].data.push(
-                    metrics.system.memoryUsageMB,
+                    metrics.system.memoryUsageMB ?? null,
                 );
-                memoryChart.update("none");
 
-                // Player chart
-                if (playerChart.data.labels.length >= maxDataPoints) {
-                    playerChart.data.labels.shift();
-                    playerChart.data.datasets[0].data.shift();
-                }
-                playerChart.data.labels.push("");
+                playerChart.data.labels.push(now);
+                const playerCount = metrics.gameState.playerCount ?? null;
+                const botCount = metrics.gameState.botCount ?? null;
                 playerChart.data.datasets[0].data.push(
-                    metrics.gameState.playerCount + metrics.gameState.botCount,
+                    playerCount !== null && botCount !== null
+                        ? playerCount + botCount
+                        : null,
                 );
+
+                ticksChart.data.labels.push(now);
+                ticksChart.data.datasets[0].data.push(
+                    metrics.gameLoop.ticksPerSecond ?? null,
+                );
+
+                gameStatsChart.data.labels.push(now);
+                const damagePerSec = metrics.gameStats?.damagePerSecond || 0;
+                const projCount = metrics.gameState?.projectileCount || 0;
+                const deathsPerSec = metrics.gameStats?.deathsPerSecond || 0;
+
+                gameStatsChart.data.datasets[0].data.push(damagePerSec);
+                gameStatsChart.data.datasets[1].data.push(projCount);
+                gameStatsChart.data.datasets[2].data.push(deathsPerSec);
+
+                // Debug logging for game stats
+                if (damagePerSec > 0 || projCount > 0 || deathsPerSec > 0) {
+                    console.log("Game stats update:", {
+                        damagePerSec,
+                        projCount,
+                        deathsPerSec,
+                        dataPoints: gameStatsChart.data.labels.length,
+                    });
+                }
+
+                // Filter out old data points based on time window
+                filterOldDataPoints();
+
+                // Update all charts
+                tickChart.update("none");
+                memoryChart.update("none");
                 playerChart.update("none");
+                ticksChart.update("none");
+                gameStatsChart.update("none");
 
                 // Update API endpoint table
                 const tbody = document.getElementById("endpoint-tbody");
@@ -911,7 +1101,10 @@
                         tbody.appendChild(row);
                     });
                 }
-            });
+            }
+
+            // WebSocket metrics handler
+            socket.on("metrics", processMetricsUpdate);
 
             // Fallback to polling if WebSocket fails
             socket.on("connect_error", () => {
@@ -920,11 +1113,12 @@
             });
 
             // Time Range Selection
-            let currentTimeRange = "live";
+            let currentTimeRange = "1m"; // Default rolling window
             let customStart = null;
             let customEnd = null;
-            let isLiveMode = true;
+            let isLiveMode = true; // Whether to receive live updates
             let historicalRefreshInterval = null;
+            let isCustomRange = false;
 
             // Convert range string to milliseconds
             function rangeToMs(range) {
@@ -953,7 +1147,7 @@
                         const end = new Date(customEnd).getTime();
                         url = `/api/metrics/history?start=${start}&end=${end}`;
                     } else {
-                        // Preset range
+                        // Preset range - get rolling window
                         const hours =
                             rangeToMs(currentTimeRange) / (60 * 60 * 1000);
                         url = `/api/metrics/history?hours=${hours}`;
@@ -975,9 +1169,153 @@
                     if (aggregates) {
                         updateDashboardWithAggregates(aggregates);
                     }
+
+                    // Update charts with historical data
+                    updateChartsWithHistoricalData(result.data);
                 } catch (error) {
                     console.error("Failed to load historical data:", error);
                 }
+            }
+
+            // Filter out data points older than the current time window
+            function filterOldDataPoints() {
+                if (isLiveMode || isCustomRange) return; // Don't filter in live or custom mode
+
+                const now = Date.now();
+                const windowMs = rangeToMs(currentTimeRange);
+                const cutoffTime = now - windowMs;
+
+                // Filter tick chart
+                while (
+                    tickChart.data.labels.length > 0 &&
+                    tickChart.data.labels[0] < cutoffTime
+                ) {
+                    tickChart.data.labels.shift();
+                    tickChart.data.datasets[0].data.shift();
+                }
+
+                // Filter memory chart
+                while (
+                    memoryChart.data.labels.length > 0 &&
+                    memoryChart.data.labels[0] < cutoffTime
+                ) {
+                    memoryChart.data.labels.shift();
+                    memoryChart.data.datasets[0].data.shift();
+                }
+
+                // Filter player chart
+                while (
+                    playerChart.data.labels.length > 0 &&
+                    playerChart.data.labels[0] < cutoffTime
+                ) {
+                    playerChart.data.labels.shift();
+                    playerChart.data.datasets[0].data.shift();
+                }
+
+                // Filter ticks per second chart
+                while (
+                    ticksChart.data.labels.length > 0 &&
+                    ticksChart.data.labels[0] < cutoffTime
+                ) {
+                    ticksChart.data.labels.shift();
+                    ticksChart.data.datasets[0].data.shift();
+                }
+
+                // Filter game stats chart
+                while (
+                    gameStatsChart.data.labels.length > 0 &&
+                    gameStatsChart.data.labels[0] < cutoffTime
+                ) {
+                    gameStatsChart.data.labels.shift();
+                    gameStatsChart.data.datasets[0].data.shift();
+                    gameStatsChart.data.datasets[1].data.shift();
+                    gameStatsChart.data.datasets[2].data.shift();
+                }
+            }
+
+            // Update charts with historical data
+            function updateChartsWithHistoricalData(data) {
+                if (!data || data.length === 0) {
+                    console.log("No historical data to display");
+                    return;
+                }
+
+                console.log(
+                    `Updating charts with ${data.length} historical data points`,
+                );
+
+                // Clear existing chart data
+                tickChart.data.labels = [];
+                tickChart.data.datasets[0].data = [];
+                memoryChart.data.labels = [];
+                memoryChart.data.datasets[0].data = [];
+                playerChart.data.labels = [];
+                playerChart.data.datasets[0].data = [];
+                ticksChart.data.labels = [];
+                ticksChart.data.datasets[0].data = [];
+                gameStatsChart.data.labels = [];
+                gameStatsChart.data.datasets[0].data = [];
+                gameStatsChart.data.datasets[1].data = [];
+                gameStatsChart.data.datasets[2].data = [];
+
+                // Populate charts with historical data
+                // Store actual timestamps (in ms) as labels for filtering later
+                data.forEach((snapshot, index) => {
+                    const timestamp = snapshot.timestamp;
+
+                    // Tick time chart
+                    tickChart.data.labels.push(timestamp);
+                    tickChart.data.datasets[0].data.push(
+                        snapshot.avg_tick_time || 0,
+                    );
+
+                    // Memory chart
+                    memoryChart.data.labels.push(timestamp);
+                    memoryChart.data.datasets[0].data.push(
+                        snapshot.memory_usage_mb || 0,
+                    );
+
+                    // Player chart
+                    playerChart.data.labels.push(timestamp);
+                    playerChart.data.datasets[0].data.push(
+                        (snapshot.player_count || 0) +
+                            (snapshot.bot_count || 0),
+                    );
+
+                    // Ticks per second chart
+                    ticksChart.data.labels.push(timestamp);
+                    ticksChart.data.datasets[0].data.push(
+                        snapshot.ticks_per_second || 0,
+                    );
+
+                    // Game stats chart
+                    gameStatsChart.data.labels.push(timestamp);
+                    gameStatsChart.data.datasets[0].data.push(
+                        snapshot.damage_per_second || 0,
+                    );
+                    gameStatsChart.data.datasets[1].data.push(
+                        snapshot.projectile_count || 0,
+                    );
+                    gameStatsChart.data.datasets[2].data.push(
+                        snapshot.deaths_per_second || 0,
+                    );
+
+                    // Debug: log first data point
+                    if (index === 0) {
+                        console.log("First game stats data point:", {
+                            damage_per_second: snapshot.damage_per_second,
+                            projectile_count: snapshot.projectile_count,
+                            deaths_per_second: snapshot.deaths_per_second,
+                        });
+                    }
+                });
+
+                // Update all charts
+                tickChart.update();
+                memoryChart.update();
+                playerChart.update();
+                ticksChart.update();
+                gameStatsChart.update();
             }
 
             // Calculate aggregated metrics from historical data
@@ -1120,7 +1458,7 @@
 
                 // Update player count
                 updateMetricValue(
-                    "player-count",
+                    "total-players",
                     Math.round(aggregates.players.avg),
                 );
 
@@ -1130,94 +1468,77 @@
                 );
             }
 
-            // Handle time range button clicks
-            document.querySelectorAll(".time-btn").forEach((btn) => {
-                btn.addEventListener("click", function () {
-                    // Remove active class from all buttons
-                    document
-                        .querySelectorAll(".time-btn")
-                        .forEach((b) => b.classList.remove("active"));
+            // Handle live toggle button
+            document
+                .getElementById("liveToggle")
+                .addEventListener("click", function () {
+                    isLiveMode = !isLiveMode;
 
-                    // Add active class to clicked button
-                    this.classList.add("active");
+                    if (isLiveMode) {
+                        this.classList.add("active");
+                        this.innerHTML = "🔴 Live";
+                        console.log("Live updates enabled");
+                    } else {
+                        this.classList.remove("active");
+                        this.innerHTML = "⏸️ Paused";
+                        console.log("Live updates paused");
+                    }
+                });
 
-                    const range = this.getAttribute("data-range");
-                    currentTimeRange = range;
+            // Handle time range button clicks (excluding live toggle)
+            document
+                .querySelectorAll(".time-btn[data-range]")
+                .forEach((btn) => {
+                    btn.addEventListener("click", function () {
+                        const range = this.getAttribute("data-range");
 
-                    // Handle live mode
-                    if (range === "live") {
-                        isLiveMode = true;
+                        // Remove active class from all time range buttons (not live toggle)
+                        document
+                            .querySelectorAll(".time-btn[data-range]")
+                            .forEach((b) => b.classList.remove("active"));
 
-                        // Stop historical refresh interval
+                        // Add active class to clicked button
+                        this.classList.add("active");
+
+                        currentTimeRange = range;
+                        isCustomRange = false;
+
+                        // Stop any existing refresh interval
                         if (historicalRefreshInterval) {
                             clearInterval(historicalRefreshInterval);
                             historicalRefreshInterval = null;
                         }
 
-                        document.getElementById(
-                            "customRangePicker",
-                        ).style.display = "none";
-                        document.getElementById("rangeDisplay").textContent =
-                            "Showing: Live data";
-                        document.getElementById("dataPoints").textContent =
-                            "Real-time updates";
-                        console.log("Switched to live mode");
-                        return;
-                    }
+                        // Show/hide custom range picker
+                        const customPicker =
+                            document.getElementById("customRangePicker");
+                        if (range === "custom") {
+                            customPicker.style.display = "flex";
 
-                    // Not live mode - viewing historical data
-                    isLiveMode = false;
+                            // Set default values to last 24 hours
+                            const now = new Date();
+                            const yesterday = new Date(
+                                now.getTime() - 24 * 60 * 60 * 1000,
+                            );
 
-                    // Start periodic refresh for historical data (every 10 seconds)
-                    if (historicalRefreshInterval) {
-                        clearInterval(historicalRefreshInterval);
-                    }
-                    historicalRefreshInterval = setInterval(() => {
-                        console.log(
-                            `Refreshing historical data for ${currentTimeRange}`,
-                        );
-                        updateHistoricalData();
-                    }, 10000); // Refresh every 10 seconds
+                            document.getElementById("endTime").value = now
+                                .toISOString()
+                                .slice(0, 16);
+                            document.getElementById("startTime").value =
+                                yesterday.toISOString().slice(0, 16);
+                        } else {
+                            customPicker.style.display = "none";
 
-                    // Show/hide custom range picker
-                    const customPicker =
-                        document.getElementById("customRangePicker");
-                    if (range === "custom") {
-                        customPicker.style.display = "flex";
+                            // Reset custom range button text
+                            document.querySelector(
+                                '[data-range="custom"]',
+                            ).textContent = "Custom Range";
 
-                        // Set default values to last 24 hours
-                        const now = new Date();
-                        const yesterday = new Date(
-                            now.getTime() - 24 * 60 * 60 * 1000,
-                        );
-
-                        document.getElementById("endTime").value = now
-                            .toISOString()
-                            .slice(0, 16);
-                        document.getElementById("startTime").value = yesterday
-                            .toISOString()
-                            .slice(0, 16);
-                    } else {
-                        customPicker.style.display = "none";
-
-                        // Update range display
-                        const rangeText = {
-                            "1m": "Last 1 minute",
-                            "5m": "Last 5 minutes",
-                            "1h": "Last 1 hour",
-                            "12h": "Last 12 hours",
-                            "24h": "Last 24 hours",
-                            "48h": "Last 48 hours",
-                        }[range];
-
-                        document.getElementById("rangeDisplay").textContent =
-                            `Showing: ${rangeText}`;
-
-                        // Load historical data
-                        updateHistoricalData();
-                    }
+                            // Load historical data
+                            updateHistoricalData();
+                        }
+                    });
                 });
-            });
 
             // Handle custom range apply button
             document
@@ -1239,15 +1560,49 @@
                         return;
                     }
 
-                    document.getElementById("rangeDisplay").textContent =
-                        `Showing: ${start.toLocaleString()} to ${end.toLocaleString()}`;
+                    // Custom range is static - stop auto-refresh
+                    isLiveMode = false;
+                    isCustomRange = true;
+                    if (historicalRefreshInterval) {
+                        clearInterval(historicalRefreshInterval);
+                        historicalRefreshInterval = null;
+                    }
 
-                    // Load historical data for custom range
+                    // Update custom range button text
+                    const customBtn = document.querySelector(
+                        '[data-range="custom"]',
+                    );
+                    customBtn.textContent = `${start.toLocaleDateString()} ${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${end.toLocaleDateString()} ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (Custom)`;
+
+                    // Load historical data for custom range (static, no auto-refresh)
                     updateHistoricalData();
                 });
 
-            // Don't load historical data on startup - we start in live mode
-            // Data will be fetched when user selects a historical time range
+            // Load initial historical data for the default time range (1m)
+            updateHistoricalData();
+
+            // Fetch initial metrics immediately on page load to avoid delay
+            async function loadInitialMetrics() {
+                try {
+                    console.log("Fetching initial metrics...");
+                    const startTime = Date.now();
+                    const response = await fetch("/api/metrics");
+                    const metrics = await response.json();
+                    const loadTime = Date.now() - startTime;
+                    console.log(
+                        `Initial metrics loaded via HTTP in ${loadTime}ms`,
+                        metrics,
+                    );
+
+                    // Process the metrics immediately
+                    processMetricsUpdate(metrics);
+                } catch (error) {
+                    console.error("Failed to load initial metrics:", error);
+                }
+            }
+
+            // Call this immediately
+            loadInitialMetrics();
         </script>
     </body>
 </html>
