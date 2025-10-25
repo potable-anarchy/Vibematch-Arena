@@ -598,32 +598,16 @@ function render(dt) {
   // Call mod render hooks
   modSystem.callHook("onRender", ctx, camera, dt);
 
-  // Spectator mode overlay
+  // Spectator mode indicator (small label at top)
   if (!player && isSpectator) {
+    // Semi-transparent background for label
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(canvas.width / 2 - 200, 10, 400, 50);
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.font = "bold 48px monospace";
+    ctx.font = "bold 24px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("SPECTATOR MODE", canvas.width / 2, canvas.height / 2 - 80);
-
-    ctx.font = "20px monospace";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
-    ctx.fillText(
-      `Playing as: ${playerName}`,
-      canvas.width / 2,
-      canvas.height / 2 - 30,
-    );
-
-    ctx.font = "16px monospace";
-    ctx.fillText(
-      "Press backtick (`) to open mod editor",
-      canvas.width / 2,
-      canvas.height / 2 + 60,
-    );
-
-    // Note: JOIN GAME button is in the HTML HUD
+    ctx.fillText("SPECTATOR MODE", canvas.width / 2, 40);
   }
 }
 
