@@ -80,7 +80,16 @@ registerHook("onRender", (ctx, camera, dt) => {
     ) {
       // Pulsing effect
       const pulse = Math.sin(Date.now() / 300) * 0.15 + 0.85;
-      const baseScale = 1.2;
+
+      // Weapon-specific scales (based on actual sprite dimensions)
+      const weaponScales = {
+        pistol: 0.25, // 104x83
+        smg: 0.15, // 345x120 (largest, needs most reduction)
+        shotgun: 0.13, // 403x116 (very large)
+        rifle: 0.15, // 362x145 (large)
+      };
+
+      const baseScale = weaponScales[pickup.weapon] || 0.3;
       const scale = baseScale * pulse;
 
       // Weapon colors for glow and labels

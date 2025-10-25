@@ -15,9 +15,11 @@ export class AssetLoader {
 
     for (let i = 0; i < frameCount; i++) {
       const framePath = `${basePath}_${i}.png`;
-      const promise = this.loadImage(`${animationKey}_${i}`, framePath).then(() => {
-        frames[i] = this.images[`${animationKey}_${i}`];
-      });
+      const promise = this.loadImage(`${animationKey}_${i}`, framePath).then(
+        () => {
+          frames[i] = this.images[`${animationKey}_${i}`];
+        },
+      );
       promises.push(promise);
     }
 
@@ -52,16 +54,48 @@ export class AssetLoader {
     // Load survivor animations (reduced frame counts for faster loading)
     const animationPromises = [
       // Handgun animations
-      this.loadAnimationFrames('handgun_idle', '/assets/survivor_sprites/handgun/idle/survivor-idle_handgun', 4),
-      this.loadAnimationFrames('handgun_move', '/assets/survivor_sprites/handgun/move/survivor-move_handgun', 4),
-      this.loadAnimationFrames('handgun_shoot', '/assets/survivor_sprites/handgun/shoot/survivor-shoot_handgun', 3),
-      this.loadAnimationFrames('handgun_reload', '/assets/survivor_sprites/handgun/reload/survivor-reload_handgun', 4),
+      this.loadAnimationFrames(
+        "handgun_idle",
+        "/assets/survivor_sprites/handgun/idle/survivor-idle_handgun",
+        4,
+      ),
+      this.loadAnimationFrames(
+        "handgun_move",
+        "/assets/survivor_sprites/handgun/move/survivor-move_handgun",
+        4,
+      ),
+      this.loadAnimationFrames(
+        "handgun_shoot",
+        "/assets/survivor_sprites/handgun/shoot/survivor-shoot_handgun",
+        3,
+      ),
+      this.loadAnimationFrames(
+        "handgun_reload",
+        "/assets/survivor_sprites/handgun/reload/survivor-reload_handgun",
+        4,
+      ),
 
       // Rifle animations
-      this.loadAnimationFrames('rifle_idle', '/assets/survivor_sprites/rifle/idle/survivor-idle_rifle', 4),
-      this.loadAnimationFrames('rifle_move', '/assets/survivor_sprites/rifle/move/survivor-move_rifle', 4),
-      this.loadAnimationFrames('rifle_shoot', '/assets/survivor_sprites/rifle/shoot/survivor-shoot_rifle', 3),
-      this.loadAnimationFrames('rifle_reload', '/assets/survivor_sprites/rifle/reload/survivor-reload_rifle', 4),
+      this.loadAnimationFrames(
+        "rifle_idle",
+        "/assets/survivor_sprites/rifle/idle/survivor-idle_rifle",
+        4,
+      ),
+      this.loadAnimationFrames(
+        "rifle_move",
+        "/assets/survivor_sprites/rifle/move/survivor-move_rifle",
+        4,
+      ),
+      this.loadAnimationFrames(
+        "rifle_shoot",
+        "/assets/survivor_sprites/rifle/shoot/survivor-shoot_rifle",
+        3,
+      ),
+      this.loadAnimationFrames(
+        "rifle_reload",
+        "/assets/survivor_sprites/rifle/reload/survivor-reload_rifle",
+        4,
+      ),
     ];
 
     await Promise.all([...loadPromises, ...animationPromises]);
