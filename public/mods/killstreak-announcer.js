@@ -13,6 +13,28 @@ const KILLSTREAK_NAMES = {
   15: "GODLIKE",
 };
 
+// Audio file mappings (Unreal Tournament style!)
+const KILLSTREAK_SOUNDS = {
+  3: "/assets/audio/announcer/killing-spree.m4a",
+  5: "/assets/audio/announcer/rampage.m4a",
+  7: "/assets/audio/announcer/dominating.m4a",
+  10: "/assets/audio/announcer/unstoppable.m4a",
+  15: "/assets/audio/announcer/godlike.m4a",
+};
+
+// Play announcer sound
+function playAnnouncerSound(soundPath) {
+  try {
+    const audio = new Audio(soundPath);
+    audio.volume = 0.7; // Announcer volume
+    audio.play().catch((err) => {
+      console.warn("Could not play announcer sound:", err);
+    });
+  } catch (err) {
+    console.warn("Error creating audio:", err);
+  }
+}
+
 registerHook("onKill", (killerId, victimId) => {
   if (killerId === game.getPlayerId()) {
     currentStreak++;
@@ -25,6 +47,11 @@ registerHook("onKill", (killerId, victimId) => {
         life: 3.0,
         maxLife: 3.0,
       });
+
+      // Play the announcer sound!
+      if (KILLSTREAK_SOUNDS[currentStreak]) {
+        playAnnouncerSound(KILLSTREAK_SOUNDS[currentStreak]);
+      }
     }
   } else if (victimId === game.getPlayerId()) {
     // Reset streak on death
