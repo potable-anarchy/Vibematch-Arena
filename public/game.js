@@ -150,6 +150,10 @@ const ctx = canvas.getContext("2d");
   menu.style.display = "none";
   game.style.display = "block";
 
+  // Resize canvas now that the game div is visible
+  // This ensures canvas gets proper dimensions
+  resizeCanvas();
+
   // Load assets in background
   assets.loadAll().then(() => {
     console.log("✅ Assets loaded, ready to join game");
@@ -221,7 +225,7 @@ window.addEventListener("resize", () => {
   clearTimeout(resizeTimeout);
   resizeTimeout = setTimeout(resizeCanvas, 100);
 });
-resizeCanvas();
+// Note: resizeCanvas() is now called in initGame() after game div is visible
 
 // Join game (transition from spectator to player)
 joinButton.addEventListener("click", async () => {
@@ -524,8 +528,13 @@ function getInterpolatedState() {
 }
 
 socket.on("shoot", (data) => {
-  createMuzzleFlash(data.x, data.y, data.angle);
-  createBulletTracer(data.x, data.y, data.angle, weapons[data.weapon].range);
+  // Calculate gun barrel end position (gun extends about 25-30 pixels from player center)
+  const gunBarrelLength = 30;
+  const gunEndX = data.x + Math.cos(data.angle) * gunBarrelLength;
+  const gunEndY = data.y + Math.sin(data.angle) * gunBarrelLength;
+
+  createMuzzleFlash(gunEndX, gunEndY, data.angle);
+  createBulletTracer(gunEndX, gunEndY, data.angle, weapons[data.weapon].range);
   modSystem.callHook("onShoot", data);
 });
 
@@ -1061,7 +1070,8 @@ function drawEffects(dt) {
 
       ctx.fillStyle = `rgba(255, 255, 100, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(15, 0, 8, 0, Math.PI * 2);
+      // Draw at position 0,0 since we've already positioned at gun barrel end
+      ctx.arc(0, 0, 8, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.restore();
