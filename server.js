@@ -845,11 +845,6 @@ function gameLoop() {
         player.y = newY;
       }
 
-      // Debug: Log when movement is blocked
-      if ((player.vx !== 0 || player.vy !== 0) && (xBlocked || yBlocked)) {
-        console.log(`🚫 Movement blocked at (${player.x.toFixed(0)}, ${player.y.toFixed(0)}) - X:${xBlocked} Y:${yBlocked}`);
-      }
-
       // Clamp to world bounds
       player.x = Math.max(
         GAME_CONFIG.PLAYER_RADIUS,

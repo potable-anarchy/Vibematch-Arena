@@ -141,6 +141,11 @@ let gameState = {
   pickups: [],
 };
 
+// Interpolation for smooth movement
+let lastServerState = { players: [], pickups: [] };
+let serverStateTime = Date.now();
+const INTERPOLATION_DELAY = 100; // ms
+
 let camera = { x: 0, y: 0 };
 let input = {
   up: false,
@@ -265,6 +270,13 @@ canvas.addEventListener("mouseup", (e) => {
 canvas.addEventListener("mousemove", (e) => {
   mouseX = e.clientX;
   mouseY = e.clientY;
+
+  // Update crosshair position
+  const crosshair = document.getElementById("crosshair");
+  if (crosshair) {
+    crosshair.style.left = `${e.clientX}px`;
+    crosshair.style.top = `${e.clientY}px`;
+  }
 });
 
 // Prevent context menu
@@ -313,6 +325,10 @@ socket.on("init", (data) => {
 });
 
 socket.on("state", (state) => {
+  // Store previous state for interpolation
+  lastServerState = JSON.parse(JSON.stringify(gameState));
+  serverStateTime = Date.now();
+
   gameState = state;
   updateHUD();
   updateScoreboard();

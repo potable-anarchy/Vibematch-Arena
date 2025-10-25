@@ -130,6 +130,7 @@ body {
     background: #1a1a2e;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
+    cursor: none; /* Hide the default cursor */
 }
 
 /* HUD */
@@ -213,7 +214,10 @@ body {
 .crosshair {
     width: 20px;
     height: 20px;
-    position: relative;
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
 }
 
 .crosshair::before,
