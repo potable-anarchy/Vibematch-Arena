@@ -112,6 +112,7 @@ const modSystem = new ModSystem({
 });
 
 const modEditor = new ModEditor(modSystem);
+modEditor.setSocket(socket); // Connect socket for server mods
 
 // Auto-load enabled mods from manifest
 async function autoLoadMods() {

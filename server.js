@@ -1240,6 +1240,153 @@ io.on("connection", (socket) => {
   socket.on("error", (error) => {
     console.error("❌ Socket error:", socket.id, error);
   });
+
+  // Server-side mod execution
+  socket.on("executeServerMod", (data) => {
+    try {
+      const { code } = data;
+      const playerId = socket.id;
+      const player = gameState.players.get(playerId);
+
+      if (!player) {
+        socket.emit("serverModResult", { error: "Player not found" });
+        return;
+      }
+
+      console.log(`🔧 Executing server mod for ${player.name}`);
+
+      // Create server mod API available to mod code
+      const serverModAPI = {
+        // Current player ID (the one executing the mod)
+        myId: playerId,
+
+        // Game state access (read-only references)
+        getGameState: () => ({
+          players: Array.from(gameState.players.values()),
+          bots: Array.from(gameState.bots.values()),
+          projectiles: gameState.projectiles,
+          pickups: gameState.pickups,
+        }),
+
+        // Player manipulation
+        setHealth: (targetId, health) => {
+          const target =
+            gameState.players.get(targetId) || gameState.bots.get(targetId);
+          if (target) {
+            target.health = Math.max(
+              0,
+              Math.min(GAME_CONFIG.PLAYER_MAX_HEALTH, health),
+            );
+            console.log(`❤️ Set health of ${target.name} to ${target.health}`);
+            return true;
+          }
+          return false;
+        },
+
+        setArmor: (targetId, armor) => {
+          const target =
+            gameState.players.get(targetId) || gameState.bots.get(targetId);
+          if (target) {
+            target.armor = Math.max(0, Math.min(100, armor));
+            console.log(`🛡️ Set armor of ${target.name} to ${target.armor}`);
+            return true;
+          }
+          return false;
+        },
+
+        teleportPlayer: (targetId, x, y) => {
+          const target =
+            gameState.players.get(targetId) || gameState.bots.get(targetId);
+          if (target) {
+            target.x = Math.max(0, Math.min(GAME_CONFIG.WORLD_WIDTH, x));
+            target.y = Math.max(0, Math.min(GAME_CONFIG.WORLD_HEIGHT, y));
+            console.log(
+              `📍 Teleported ${target.name} to (${target.x}, ${target.y})`,
+            );
+            return true;
+          }
+          return false;
+        },
+
+        giveWeapon: (targetId, weapon) => {
+          const target =
+            gameState.players.get(targetId) || gameState.bots.get(targetId);
+          if (target && WEAPONS[weapon]) {
+            target.weapon = weapon;
+            target.ammo = WEAPONS[weapon].mag;
+            target.maxAmmo = WEAPONS[weapon].mag;
+            target.reloading = false;
+            console.log(`🔫 Gave ${weapon} to ${target.name}`);
+            return true;
+          }
+          return false;
+        },
+
+        spawnPickup: (x, y, type) => {
+          if (!PICKUP_TYPES[type]) return false;
+
+          gameState.pickups.push({
+            id: gameState.nextPickupId++,
+            x: Math.max(0, Math.min(GAME_CONFIG.WORLD_WIDTH, x)),
+            y: Math.max(0, Math.min(GAME_CONFIG.WORLD_HEIGHT, y)),
+            type,
+            active: true,
+            respawnAt: null,
+          });
+          console.log(`📦 Spawned pickup ${type} at (${x}, ${y})`);
+          return true;
+        },
+
+        killPlayer: (targetId) => {
+          const target =
+            gameState.players.get(targetId) || gameState.bots.get(targetId);
+          if (target && target.health > 0) {
+            target.health = 0;
+            target.deaths++;
+            target.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
+            console.log(`💀 Killed ${target.name}`);
+            return true;
+          }
+          return false;
+        },
+
+        getAllPlayers: () => {
+          return [
+            ...Array.from(gameState.players.values()),
+            ...Array.from(gameState.bots.values()),
+          ];
+        },
+
+        // Utility functions
+        log: (...args) => {
+          console.log(`[Server Mod]`, ...args);
+        },
+
+        broadcast: (message) => {
+          io.emit("serverModMessage", { message });
+        },
+      };
+
+      // Execute the mod code in a safe context
+      // Wrap code in a function that receives the API
+      const modFunction = new Function("api", code);
+      const result = modFunction(serverModAPI);
+
+      socket.emit("serverModResult", {
+        success: true,
+        result:
+          result !== undefined ? String(result) : "Mod executed successfully",
+      });
+
+      console.log(`✅ Server mod executed successfully for ${player.name}`);
+    } catch (error) {
+      console.error("❌ Error executing server mod:", error);
+      socket.emit("serverModResult", {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  });
 });
 
 // Handle shooting - creates projectiles instead of instant hitscan

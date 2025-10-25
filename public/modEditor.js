@@ -30,7 +30,7 @@ export class ModEditor {
       box-shadow: 0 0 30px rgba(102, 204, 255, 0.3);
     `;
 
-    // Header
+    // Header with tabs
     const header = document.createElement("div");
     header.style.cssText = `
       background: #1a1a2e;
@@ -42,7 +42,31 @@ export class ModEditor {
       cursor: move;
     `;
     header.innerHTML = `
-      <span style="color: #66ccff; font-family: monospace; font-weight: bold;">MOD EDITOR</span>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <span style="color: #66ccff; font-family: monospace; font-weight: bold;">MOD EDITOR</span>
+        <button id="clientModTab" class="mod-tab active" data-tab="client" style="
+          background: #66ccff;
+          border: none;
+          color: #0a0a14;
+          padding: 5px 12px;
+          cursor: pointer;
+          border-radius: 3px;
+          font-family: monospace;
+          font-weight: bold;
+          font-size: 11px;
+        ">CLIENT</button>
+        <button id="serverModTab" class="mod-tab" data-tab="server" style="
+          background: rgba(102, 204, 255, 0.3);
+          border: 1px solid #66ccff;
+          color: #66ccff;
+          padding: 5px 12px;
+          cursor: pointer;
+          border-radius: 3px;
+          font-family: monospace;
+          font-weight: bold;
+          font-size: 11px;
+        ">SERVER</button>
+      </div>
       <button id="closeModEditor" style="
         background: #ff3366;
         border: none;
@@ -53,6 +77,8 @@ export class ModEditor {
         font-family: monospace;
       ">✕</button>
     `;
+
+    this.currentTab = "client";
 
     // Mod name input
     const nameInput = document.createElement("div");
@@ -88,8 +114,6 @@ export class ModEditor {
 
     this.textarea = document.createElement("textarea");
     this.textarea.id = "modCode";
-    this.textarea.placeholder =
-      '// Write your mod code here...\n// Example:\nregisterHook("onHit", (player, target) => {\n  console.log("Hit!", player, target);\n});';
     this.textarea.style.cssText = `
       width: 100%;
       height: 100%;
@@ -102,6 +126,7 @@ export class ModEditor {
       resize: none;
       outline: none;
     `;
+    this.updatePlaceholder();
     editorWrapper.appendChild(this.textarea);
 
     // Generate Code button overlay
@@ -241,6 +266,12 @@ export class ModEditor {
       .getElementById("closeModEditor")
       .addEventListener("click", () => this.hide());
     document
+      .getElementById("clientModTab")
+      .addEventListener("click", () => this.switchTab("client"));
+    document
+      .getElementById("serverModTab")
+      .addEventListener("click", () => this.switchTab("server"));
+    document
       .getElementById("loadMod")
       .addEventListener("click", () => this.loadCurrentMod());
     document
@@ -320,6 +351,74 @@ export class ModEditor {
     }
   }
 
+  setSocket(socket) {
+    this.socket = socket;
+    this.setupSocketListeners();
+  }
+
+  setupSocketListeners() {
+    if (!this.socket) return;
+
+    this.socket.on("serverModResult", (data) => {
+      if (data.error) {
+        this.showStatus(`❌ Server Error: ${data.error}`, "#ff3366");
+        console.error("Server mod error:", data.stack);
+      } else {
+        this.showStatus(`✅ ${data.result}`, "#66ff66");
+      }
+    });
+
+    this.socket.on("serverModMessage", (data) => {
+      this.showStatus(`📢 ${data.message}`, "#ffaa00");
+    });
+
+    this.socket.on("serverModAction", (data) => {
+      const msg = `🔧 ${data.action}: ${data.targetName}`;
+      this.showStatus(msg, "#00aaff");
+    });
+  }
+
+  switchTab(tab) {
+    this.currentTab = tab;
+
+    // Update tab button styles
+    const clientTab = document.getElementById("clientModTab");
+    const serverTab = document.getElementById("serverModTab");
+
+    if (tab === "client") {
+      clientTab.style.background = "#66ccff";
+      clientTab.style.color = "#0a0a14";
+      clientTab.style.border = "none";
+
+      serverTab.style.background = "rgba(102, 204, 255, 0.3)";
+      serverTab.style.color = "#66ccff";
+      serverTab.style.border = "1px solid #66ccff";
+    } else {
+      serverTab.style.background = "#66ccff";
+      serverTab.style.color = "#0a0a14";
+      serverTab.style.border = "none";
+
+      clientTab.style.background = "rgba(102, 204, 255, 0.3)";
+      clientTab.style.color = "#66ccff";
+      clientTab.style.border = "1px solid #66ccff";
+    }
+
+    // Update placeholder
+    this.updatePlaceholder();
+
+    this.showStatus(`Switched to ${tab} mod mode`, "#66ccff");
+  }
+
+  updatePlaceholder() {
+    if (this.currentTab === "client") {
+      this.textarea.placeholder =
+        '// Client-side mod - runs in your browser\n// Example:\nregisterHook("onHit", (player, target) => {\n  console.log("Hit!", player, target);\n});';
+    } else {
+      this.textarea.placeholder =
+        '// Server-side mod - runs on the server\n// Example: Give yourself god mode\nconst players = api.getAllPlayers();\nconst me = players.find(p => p.id === api.myId);\nif (me) {\n  api.setHealth(me.id, 100);\n  api.log("Set health to 100");\n}';
+    }
+  }
+
   loadCurrentMod() {
     const name = document.getElementById("modName").value.trim();
     const code = this.textarea.value;
@@ -329,11 +428,23 @@ export class ModEditor {
       return;
     }
 
-    const result = this.modSystem.loadMod(name, code);
-    if (result.success) {
-      this.showStatus(`✅ ${result.message}`, "#66ff66");
+    if (this.currentTab === "server") {
+      // Execute server-side mod
+      if (!this.socket) {
+        this.showStatus("❌ Not connected to server", "#ff3366");
+        return;
+      }
+
+      this.showStatus("⏳ Executing server mod...", "#ffaa00");
+      this.socket.emit("executeServerMod", { code });
     } else {
-      this.showStatus(`❌ ${result.message}`, "#ff3366");
+      // Load client-side mod
+      const result = this.modSystem.loadMod(name, code);
+      if (result.success) {
+        this.showStatus(`✅ ${result.message}`, "#66ff66");
+      } else {
+        this.showStatus(`❌ ${result.message}`, "#ff3366");
+      }
     }
   }
 
@@ -346,11 +457,23 @@ export class ModEditor {
       return;
     }
 
-    const result = this.modSystem.reloadMod(name, code);
-    if (result.success) {
-      this.showStatus(`🔄 Mod "${name}" reloaded`, "#ffaa00");
+    if (this.currentTab === "server") {
+      // Re-execute server-side mod
+      if (!this.socket) {
+        this.showStatus("❌ Not connected to server", "#ff3366");
+        return;
+      }
+
+      this.showStatus("⏳ Re-executing server mod...", "#ffaa00");
+      this.socket.emit("executeServerMod", { code });
     } else {
-      this.showStatus(`❌ ${result.message}`, "#ff3366");
+      // Reload client-side mod
+      const result = this.modSystem.reloadMod(name, code);
+      if (result.success) {
+        this.showStatus(`🔄 Mod "${name}" reloaded`, "#ffaa00");
+      } else {
+        this.showStatus(`❌ ${result.message}`, "#ff3366");
+      }
     }
   }
 
@@ -362,8 +485,15 @@ export class ModEditor {
       return;
     }
 
-    this.modSystem.unloadMod(name);
-    this.showStatus(`🗑️ Mod "${name}" unloaded`, "#66ccff");
+    if (this.currentTab === "server") {
+      this.showStatus(
+        "⚠️ Server mods cannot be unloaded (restart required)",
+        "#ffaa00",
+      );
+    } else {
+      this.modSystem.unloadMod(name);
+      this.showStatus(`🗑️ Mod "${name}" unloaded`, "#66ccff");
+    }
   }
 
   showStatus(message, color = "#66ccff") {
