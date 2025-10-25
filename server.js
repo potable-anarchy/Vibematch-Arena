@@ -421,8 +421,15 @@ function damagePlayer(player, damage, attackerId) {
   if (player.health <= 0) {
     player.deaths++;
     if (attackerId && attackerId !== player.id) {
+      // Check if attacker is a player
       const attacker = gameState.players.get(attackerId);
-      if (attacker) attacker.kills++;
+      if (attacker) {
+        attacker.kills++;
+      } else {
+        // Check if attacker is a bot
+        const botAttacker = gameState.bots.get(attackerId);
+        if (botAttacker) botAttacker.kills++;
+      }
     }
     player.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
     return true; // Player died
