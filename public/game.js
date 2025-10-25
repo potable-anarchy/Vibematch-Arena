@@ -150,6 +150,10 @@ const ctx = canvas.getContext("2d");
   menu.style.display = "none";
   game.style.display = "block";
 
+  // Resize canvas now that the game div is visible
+  // This ensures canvas gets proper dimensions
+  resizeCanvas();
+
   // Load assets in background
   assets.loadAll().then(() => {
     console.log("✅ Assets loaded, ready to join game");
@@ -221,7 +225,7 @@ window.addEventListener("resize", () => {
   clearTimeout(resizeTimeout);
   resizeTimeout = setTimeout(resizeCanvas, 100);
 });
-resizeCanvas();
+// Note: resizeCanvas() is now called in initGame() after game div is visible
 
 // Join game (transition from spectator to player)
 joinButton.addEventListener("click", async () => {
