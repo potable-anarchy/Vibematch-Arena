@@ -349,7 +349,31 @@ const spectateButton = document.getElementById("spectateButton");
 const controlsButton = document.getElementById("controlsButton");
 const closeControlsButton = document.getElementById("closeControlsButton");
 
+// Tab elements
+const playerTab = document.getElementById("playerTab");
+const settingsTab = document.getElementById("settingsTab");
+const playerTabContent = document.getElementById("playerTabContent");
+const settingsTabContent = document.getElementById("settingsTabContent");
+
 let isMenuOpen = false;
+let currentTab = "player";
+
+function switchTab(tabName) {
+  currentTab = tabName;
+
+  // Update tab buttons
+  if (tabName === "player") {
+    playerTab.classList.add("active");
+    settingsTab.classList.remove("active");
+    playerTabContent.classList.add("active");
+    settingsTabContent.classList.remove("active");
+  } else if (tabName === "settings") {
+    playerTab.classList.remove("active");
+    settingsTab.classList.add("active");
+    playerTabContent.classList.remove("active");
+    settingsTabContent.classList.add("active");
+  }
+}
 
 function toggleGameMenu() {
   isMenuOpen = !isMenuOpen;
@@ -358,6 +382,8 @@ function toggleGameMenu() {
 
   // Populate name input with current name when opening
   if (isMenuOpen) {
+    // Reset to player tab when opening menu
+    switchTab("player");
     playerNameInput.value = playerName;
     playerNameInput.focus();
     playerNameInput.select();
@@ -447,6 +473,15 @@ controlsButton.addEventListener("click", () => {
 // Close controls button
 closeControlsButton.addEventListener("click", () => {
   closeControlsScreen();
+});
+
+// Tab button event listeners
+playerTab.addEventListener("click", () => {
+  switchTab("player");
+});
+
+settingsTab.addEventListener("click", () => {
+  switchTab("settings");
 });
 
 // Socket connection events
