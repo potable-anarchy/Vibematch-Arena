@@ -1,0 +1,444 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Courier New", monospace;
+    background: #0a0a0a;
+    color: #fff;
+    overflow: hidden;
+}
+
+/* Menu Styles */
+.menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #1a0a0a 0%, #0a0a1a 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.menu-content {
+    text-align: center;
+    padding: 40px;
+    background: rgba(20, 20, 30, 0.8);
+    border: 2px solid #ff3366;
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(255, 51, 102, 0.3);
+}
+
+.menu h1 {
+    font-size: 48px;
+    color: #ff3366;
+    text-shadow: 0 0 10px #ff3366;
+    margin-bottom: 10px;
+    letter-spacing: 4px;
+}
+
+.subtitle {
+    font-size: 16px;
+    color: #66ccff;
+    margin-bottom: 10px;
+    opacity: 0.8;
+}
+
+.player-count {
+    font-size: 14px;
+    color: #ffaa00;
+    margin-bottom: 20px;
+    font-weight: bold;
+}
+
+.menu input {
+    width: 300px;
+    padding: 15px;
+    font-size: 18px;
+    font-family: "Courier New", monospace;
+    background: #1a1a2e;
+    border: 2px solid #66ccff;
+    color: #fff;
+    text-align: center;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    transition: all 0.3s;
+}
+
+.menu input:focus {
+    outline: none;
+    border-color: #ff3366;
+    box-shadow: 0 0 10px rgba(255, 51, 102, 0.5);
+}
+
+.menu button {
+    width: 300px;
+    padding: 15px;
+    font-size: 20px;
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    background: #ff3366;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.menu button:hover {
+    background: #ff5577;
+    box-shadow: 0 0 20px rgba(255, 51, 102, 0.6);
+    transform: translateY(-2px);
+}
+
+.controls-info {
+    margin-top: 30px;
+    padding: 20px;
+    background: rgba(10, 10, 20, 0.5);
+    border-radius: 5px;
+    text-align: left;
+}
+
+.controls-info h3 {
+    color: #66ccff;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.controls-info p {
+    margin: 8px 0;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+/* Game Styles */
+.game {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+#gameCanvas {
+    display: block;
+    background: #1a1a2e;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+/* HUD */
+.hud {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+}
+
+.hud-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.hud-bottom {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+.health-bar,
+.armor-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bar-label {
+    font-size: 14px;
+    font-weight: bold;
+    color: #66ccff;
+    width: 60px;
+}
+
+.bar {
+    position: relative;
+    width: 200px;
+    height: 30px;
+    background: rgba(20, 20, 30, 0.8);
+    border: 2px solid #66ccff;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.bar-fill.health {
+    background: linear-gradient(90deg, #ff3366, #ff6699);
+}
+
+.bar-fill.armor {
+    background: linear-gradient(90deg, #66ccff, #99ddff);
+}
+
+.bar-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+}
+
+.crosshair {
+    width: 20px;
+    height: 20px;
+    position: relative;
+}
+
+.crosshair::before,
+.crosshair::after {
+    content: "";
+    position: absolute;
+    background: #ff3366;
+    box-shadow: 0 0 5px #ff3366;
+}
+
+.crosshair::before {
+    width: 2px;
+    height: 20px;
+    left: 9px;
+}
+
+.crosshair::after {
+    width: 20px;
+    height: 2px;
+    top: 9px;
+}
+
+.weapon-info {
+    text-align: center;
+    background: rgba(20, 20, 30, 0.8);
+    padding: 15px 20px;
+    border: 2px solid #66ccff;
+    border-radius: 5px;
+}
+
+.weapon-name {
+    font-size: 20px;
+    font-weight: bold;
+    color: #ff3366;
+    margin-bottom: 5px;
+    text-shadow: 0 0 5px #ff3366;
+}
+
+.ammo-count {
+    font-size: 24px;
+    font-weight: bold;
+    color: #66ccff;
+}
+
+.reload-indicator {
+    font-size: 14px;
+    color: #ffaa00;
+    margin-top: 5px;
+    animation: blink 0.5s infinite;
+}
+
+@keyframes blink {
+    0%,
+    50%,
+    100% {
+        opacity: 1;
+    }
+    25%,
+    75% {
+        opacity: 0.5;
+    }
+}
+
+/* Scoreboard - Hidden, using leaderboard mod instead */
+.scoreboard {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(20, 20, 30, 0.9);
+    border: 2px solid #66ccff;
+    border-radius: 5px;
+    padding: 15px;
+    min-width: 250px;
+    pointer-events: none;
+    display: none; /* Hidden to avoid overlap with canvas HUD */
+}
+
+.scoreboard h3 {
+    color: #66ccff;
+    margin-bottom: 10px;
+    text-align: center;
+    font-size: 16px;
+}
+
+.score-entry {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(102, 204, 255, 0.2);
+    font-size: 14px;
+}
+
+.score-entry.self {
+    color: #ff3366;
+    font-weight: bold;
+}
+
+.score-name {
+    flex: 1;
+}
+
+.score-kd {
+    margin-left: 10px;
+    color: #66ccff;
+}
+
+/* Killfeed */
+.killfeed {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    pointer-events: none;
+}
+
+.kill-message {
+    background: rgba(20, 20, 30, 0.9);
+    border: 2px solid #ff3366;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 14px;
+    animation:
+        fadeIn 0.3s,
+        fadeOut 0.5s 2.5s;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+/* Respawn Message */
+.respawn-message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background: rgba(20, 20, 30, 0.95);
+    border: 3px solid #ff3366;
+    padding: 40px 60px;
+    border-radius: 10px;
+    pointer-events: none;
+}
+
+.respawn-message p {
+    font-size: 48px;
+    font-weight: bold;
+    color: #ff3366;
+    text-shadow: 0 0 10px #ff3366;
+    margin-bottom: 20px;
+}
+
+.respawn-message span {
+    font-size: 24px;
+    color: #66ccff;
+}
+
+/* Spectator Overlay */
+.spectator-overlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin-top: 80px;
+    z-index: 500;
+    pointer-events: none;
+}
+
+.join-button-spectator {
+    background: linear-gradient(135deg, #ff3366, #ff6699);
+    color: #fff;
+    border: 3px solid #fff;
+    padding: 20px 60px;
+    font-size: 32px;
+    font-weight: bold;
+    font-family: "Courier New", monospace;
+    cursor: pointer;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    box-shadow: 0 0 30px rgba(255, 51, 102, 0.8);
+    transition: all 0.3s ease;
+    pointer-events: auto;
+    animation: pulse 2s infinite;
+}
+
+.join-button-spectator:hover {
+    background: linear-gradient(135deg, #ff6699, #ff99cc);
+    transform: scale(1.05);
+    box-shadow: 0 0 50px rgba(255, 51, 102, 1);
+}
+
+.join-button-spectator:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.5;
+    animation: none;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 30px rgba(255, 51, 102, 0.8);
+    }
+    50% {
+        box-shadow: 0 0 50px rgba(255, 51, 102, 1);
+    }
+}

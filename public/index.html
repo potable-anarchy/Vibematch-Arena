@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Deathmatch Arena</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <!-- Menu no longer needed - auto-load as spectator -->
+        <div id="menu" class="menu" style="display: none"></div>
+
+        <div id="game" class="game" style="display: none">
+            <canvas id="gameCanvas"></canvas>
+
+            <!-- Spectator overlay with join button -->
+            <div id="spectatorOverlay" class="spectator-overlay">
+                <button id="joinButton" class="join-button-spectator">
+                    JOIN GAME
+                </button>
+            </div>
+
+            <div id="hud" class="hud">
+                <div class="hud-center">
+                    <div id="crosshair" class="crosshair"></div>
+                </div>
+
+                <div class="hud-bottom">
+                    <div class="health-bar">
+                        <div class="bar-label">HP</div>
+                        <div class="bar">
+                            <div id="healthBar" class="bar-fill health"></div>
+                            <span id="healthText" class="bar-text">100</span>
+                        </div>
+                    </div>
+                    <div class="armor-bar">
+                        <div class="bar-label">ARMOR</div>
+                        <div class="bar">
+                            <div id="armorBar" class="bar-fill armor"></div>
+                            <span id="armorText" class="bar-text">0</span>
+                        </div>
+                    </div>
+                    <div class="weapon-info">
+                        <div id="weaponName" class="weapon-name">PISTOL</div>
+                        <div id="ammoCount" class="ammo-count">12 / 12</div>
+                        <div
+                            id="reloadIndicator"
+                            class="reload-indicator"
+                            style="display: none"
+                        >
+                            RELOADING...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="scoreboard" class="scoreboard">
+                <h3>SCOREBOARD</h3>
+                <div id="scoreboardContent"></div>
+            </div>
+
+            <div id="killfeed" class="killfeed"></div>
+
+            <div
+                id="respawnMessage"
+                class="respawn-message"
+                style="display: none"
+            >
+                <p>YOU DIED</p>
+                <span id="respawnTimer"></span>
+            </div>
+        </div>
+
+        <script src="/socket.io/socket.io.js"></script>
+        <script type="module" src="game.js"></script>
+    </body>
+</html>

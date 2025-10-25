@@ -1,0 +1,82 @@
+{
+  "mods": [
+    {
+      "name": "Walls and Obstacles",
+      "file": "walls-and-obstacles.js",
+      "description": "Adds walls, cover, and crates to the map (LOAD FIRST - renders background)",
+      "enabled": true
+    },
+    {
+      "name": "Weapon Pickups",
+      "file": "weapon-pickups.js",
+      "description": "Adds weapon pickups (SMG, Shotgun, Rifle) around the map",
+      "enabled": true
+    },
+    {
+      "name": "Screen Shake",
+      "file": "screen-shake.js",
+      "description": "Camera shake on hits, kills, and weapon fire",
+      "enabled": true
+    },
+    {
+      "name": "Hit Markers",
+      "file": "hit-markers.js",
+      "description": "Crosshair hit confirmation markers",
+      "enabled": true
+    },
+    {
+      "name": "Killstreak Announcer",
+      "file": "killstreak-announcer.js",
+      "description": "Announces killstreaks with big text (3, 5, 7, 10, 15 kills)",
+      "enabled": true
+    },
+    {
+      "name": "Leaderboard Overlay",
+      "file": "leaderboard-overlay.js",
+      "description": "Press TAB to show/hide top 5 players leaderboard",
+      "enabled": true
+    },
+    {
+      "name": "HUD Layout Manager",
+      "file": "hud-layout-manager.js",
+      "description": "Core system for managing HUD element positioning (loads before HUD elements)",
+      "enabled": true
+    },
+    {
+      "name": "Debug HUD",
+      "file": "debug-hud.js",
+      "description": "Debug visualization for HUD Layout Manager",
+      "enabled": false
+    },
+    {
+      "name": "Better HUD v2",
+      "file": "better-hud-v2.js",
+      "description": "Enhanced HUD with FPS counter, ammo warnings, and speed indicator",
+      "enabled": true
+    },
+    {
+      "name": "Minimap v2",
+      "file": "minimap-v2.js",
+      "description": "Tactical minimap showing players and pickups",
+      "enabled": true
+    },
+    {
+      "name": "Kill Counter",
+      "file": "example-killcounter.js",
+      "description": "Shows your kill count in the top-left corner",
+      "enabled": false
+    },
+    {
+      "name": "Rainbow Trail",
+      "file": "example-rainbow-trail.js",
+      "description": "Adds a colorful particle trail behind your player",
+      "enabled": false
+    },
+    {
+      "name": "Damage Numbers",
+      "file": "example-damage-numbers.js",
+      "description": "Shows floating damage numbers when you hit enemies",
+      "enabled": false
+    }
+  ]
+}

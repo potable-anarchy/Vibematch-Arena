@@ -1,0 +1,28 @@
+{
+  "name": "deathmatch-arena",
+  "version": "1.0.0",
+  "description": "Fast-paced top-down multiplayer deathmatch shooter",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "supervisor": "node supervisor.js",
+    "prod": "node supervisor.js"
+  },
+  "keywords": [
+    "game",
+    "multiplayer",
+    "shooter",
+    "deathmatch"
+  ],
+  "author": "Brad",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
