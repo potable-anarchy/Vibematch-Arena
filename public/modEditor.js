@@ -19,8 +19,8 @@ export class ModEditor {
     this.container.style.cssText = `
       position: fixed;
       top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+      right: 20px;
+      transform: translateY(-50%);
       width: 600px;
       background: rgba(10, 10, 20, 0.98);
       border: 2px solid #00ff00;
