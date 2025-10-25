@@ -51,18 +51,18 @@ export class AssetLoader {
       this.loadImage(asset.key, asset.src),
     );
 
-    // Load survivor animations (reduced frame counts for faster loading)
+    // Load survivor animations with full frame counts from the art pack
     const animationPromises = [
       // Handgun animations
       this.loadAnimationFrames(
         "handgun_idle",
         "/assets/survivor_sprites/handgun/idle/survivor-idle_handgun",
-        4,
+        20,
       ),
       this.loadAnimationFrames(
         "handgun_move",
         "/assets/survivor_sprites/handgun/move/survivor-move_handgun",
-        4,
+        20,
       ),
       this.loadAnimationFrames(
         "handgun_shoot",
@@ -72,19 +72,19 @@ export class AssetLoader {
       this.loadAnimationFrames(
         "handgun_reload",
         "/assets/survivor_sprites/handgun/reload/survivor-reload_handgun",
-        4,
+        15,
       ),
 
-      // Rifle animations
+      // Rifle animations (for rifle and SMG)
       this.loadAnimationFrames(
         "rifle_idle",
         "/assets/survivor_sprites/rifle/idle/survivor-idle_rifle",
-        4,
+        20,
       ),
       this.loadAnimationFrames(
         "rifle_move",
         "/assets/survivor_sprites/rifle/move/survivor-move_rifle",
-        4,
+        20,
       ),
       this.loadAnimationFrames(
         "rifle_shoot",
@@ -94,7 +94,29 @@ export class AssetLoader {
       this.loadAnimationFrames(
         "rifle_reload",
         "/assets/survivor_sprites/rifle/reload/survivor-reload_rifle",
-        4,
+        15,
+      ),
+
+      // Shotgun animations
+      this.loadAnimationFrames(
+        "shotgun_idle",
+        "/assets/survivor_sprites/shotgun/idle/survivor-idle_shotgun",
+        20,
+      ),
+      this.loadAnimationFrames(
+        "shotgun_move",
+        "/assets/survivor_sprites/shotgun/move/survivor-move_shotgun",
+        20,
+      ),
+      this.loadAnimationFrames(
+        "shotgun_shoot",
+        "/assets/survivor_sprites/shotgun/shoot/survivor-shoot_shotgun",
+        3,
+      ),
+      this.loadAnimationFrames(
+        "shotgun_reload",
+        "/assets/survivor_sprites/shotgun/reload/survivor-reload_shotgun",
+        15,
       ),
     ];
 

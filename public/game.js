@@ -1079,26 +1079,28 @@ function drawPlayer(p) {
   // Get player's color
   const playerColor = getPlayerColor(p.id);
 
-  // Determine animation based on state
+  // Determine animation based on weapon type
   let weaponType = "handgun"; // default
   if (p.weapon === "rifle" || p.weapon === "smg") {
     weaponType = "rifle";
+  } else if (p.weapon === "shotgun") {
+    weaponType = "shotgun";
   }
 
   // Determine animation state
   let animationKey;
   if (p.reloading) {
     animationKey = `${weaponType}_reload`;
-    animator.setFrameDelay(40); // Slower for reload
+    animator.setFrameDelay(30); // Faster for more frames (15 frames total)
   } else {
     // Check if player is moving
     const isMoving = p.vx !== 0 || p.vy !== 0;
     if (isMoving) {
       animationKey = `${weaponType}_move`;
-      animator.setFrameDelay(50);
+      animator.setFrameDelay(40); // Faster for more frames (20 frames total)
     } else {
       animationKey = `${weaponType}_idle`;
-      animator.setFrameDelay(60);
+      animator.setFrameDelay(50); // Faster for more frames (20 frames total)
     }
   }
 
