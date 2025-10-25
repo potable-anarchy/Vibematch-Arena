@@ -72,6 +72,15 @@ class PerformanceMonitor {
         activeGames: 0, // Active game sessions
       },
 
+      // Game Statistics (cumulative)
+      gameStats: {
+        totalDamage: 0, // Total damage dealt since server start
+        totalDeaths: 0, // Total deaths since server start
+        totalKills: 0, // Total kills since server start
+        damagePerSecond: 0, // Damage rate
+        deathsPerSecond: 0, // Death rate
+      },
+
       // System Metrics
       system: {
         memoryUsageMB: 0, // Current memory usage
@@ -118,6 +127,8 @@ class PerformanceMonitor {
       lastRequestCount: 0,
       lastErrorCount: 0,
       lastTickCount: 0,
+      lastDamage: 0,
+      lastDeaths: 0,
     };
 
     // Request timing storage
@@ -193,6 +204,52 @@ class PerformanceMonitor {
       CREATE INDEX IF NOT EXISTS idx_timestamp ON metrics_snapshots(timestamp);
     `);
 
+    // Add new columns if they don't exist (for existing databases)
+    try {
+      this.db.exec(
+        `ALTER TABLE metrics_snapshots ADD COLUMN total_damage REAL;`,
+      );
+      console.log("✅ Added total_damage column");
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
+    try {
+      this.db.exec(
+        `ALTER TABLE metrics_snapshots ADD COLUMN total_deaths INTEGER;`,
+      );
+      console.log("✅ Added total_deaths column");
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
+    try {
+      this.db.exec(
+        `ALTER TABLE metrics_snapshots ADD COLUMN total_kills INTEGER;`,
+      );
+      console.log("✅ Added total_kills column");
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
+    try {
+      this.db.exec(
+        `ALTER TABLE metrics_snapshots ADD COLUMN damage_per_second REAL;`,
+      );
+      console.log("✅ Added damage_per_second column");
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
+    try {
+      this.db.exec(
+        `ALTER TABLE metrics_snapshots ADD COLUMN deaths_per_second REAL;`,
+      );
+      console.log("✅ Added deaths_per_second column");
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
     console.log("✅ Metrics database initialized");
   }
 
@@ -208,9 +265,10 @@ class PerformanceMonitor {
         player_count, bot_count, projectile_count, pickup_count,
         active_connections, messages_per_second, bytes_per_second,
         api_requests_per_second, api_avg_response_time, api_p50, api_p95, api_p99, api_error_rate,
+        total_damage, total_deaths, total_kills, damage_per_second, deaths_per_second,
         game_loop_compliance, api_latency_compliance, error_rate_compliance, overall_health
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `);
 
@@ -242,6 +300,11 @@ class PerformanceMonitor {
         this.metrics.api.p95,
         this.metrics.api.p99,
         this.metrics.api.errorRate,
+        this.metrics.gameStats.totalDamage,
+        this.metrics.gameStats.totalDeaths,
+        this.metrics.gameStats.totalKills,
+        this.metrics.gameStats.damagePerSecond,
+        this.metrics.gameStats.deathsPerSecond,
         this.metrics.sli.gameLoopCompliance,
         this.metrics.sli.apiLatencyCompliance,
         this.metrics.sli.errorRateCompliance ? 1 : 0,
@@ -414,12 +477,26 @@ class PerformanceMonitor {
     const tickDelta = this.counters.lastTickCount;
     this.metrics.gameLoop.ticksPerSecond = Math.round(tickDelta / deltaSeconds);
 
+    // Game stats rates
+    const damageDelta =
+      this.metrics.gameStats.totalDamage - this.counters.lastDamage;
+    const deathsDelta =
+      this.metrics.gameStats.totalDeaths - this.counters.lastDeaths;
+    this.metrics.gameStats.damagePerSecond = +(
+      damageDelta / deltaSeconds
+    ).toFixed(2);
+    this.metrics.gameStats.deathsPerSecond = +(
+      deathsDelta / deltaSeconds
+    ).toFixed(2);
+
     // Update counters
     this.counters.lastMessageCount = this.metrics.network.messageCount;
     this.counters.lastBytesSent = this.metrics.network.bytesSent;
     this.counters.lastRequestCount = this.metrics.api.requestCount;
     this.counters.lastErrorCount = this.metrics.api.errorCount;
     this.counters.lastTickCount = 0;
+    this.counters.lastDamage = this.metrics.gameStats.totalDamage;
+    this.counters.lastDeaths = this.metrics.gameStats.totalDeaths;
 
     this.metrics.lastUpdate = now;
   }
@@ -639,6 +716,28 @@ class PerformanceMonitor {
     this.metrics.gameState.botCount = gameState.bots || 0;
     this.metrics.gameState.projectileCount = gameState.projectiles || 0;
     this.metrics.gameState.pickupCount = gameState.pickups || 0;
+  }
+
+  /**
+   * Record damage dealt
+   * @param {number} amount - Amount of damage dealt
+   */
+  recordDamage(amount) {
+    this.metrics.gameStats.totalDamage += amount;
+  }
+
+  /**
+   * Record a death
+   */
+  recordDeath() {
+    this.metrics.gameStats.totalDeaths++;
+  }
+
+  /**
+   * Record a kill
+   */
+  recordKill() {
+    this.metrics.gameStats.totalKills++;
   }
 
   /**
