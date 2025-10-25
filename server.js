@@ -512,6 +512,29 @@ function raycast(x, y, angle, range, shooterId) {
     }
   }
 
+  // Check bot collisions (only if closer than wall hit)
+  for (const [id, bot] of gameState.bots) {
+    if (id === shooterId || bot.health <= 0) continue;
+
+    // Simple circle intersection
+    const dx = bot.x - x;
+    const dy = bot.y - y;
+
+    const a = rayDx * rayDx + rayDy * rayDy;
+    const b = -2 * (rayDx * dx + rayDy * dy);
+    const c =
+      dx * dx + dy * dy - GAME_CONFIG.PLAYER_RADIUS * GAME_CONFIG.PLAYER_RADIUS;
+
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const t = (-b - Math.sqrt(disc)) / (2 * a);
+      if (t >= 0 && t < closestDist) {
+        closestDist = t;
+        closestHit = { player: bot, distance: t };
+      }
+    }
+  }
+
   return closestHit;
 }
 
