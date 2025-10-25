@@ -53,18 +53,22 @@ class SoundManager {
 // Initialize sound manager
 const soundManager = new SoundManager();
 
-// Preload all sounds with appropriate pool sizes and volumes
-// Reduced pool sizes to minimize lag
-soundManager.preload('fire1', '/assets/sounds/Fire 1.mp3', 2, 0.4);
-soundManager.preload('fire2', '/assets/sounds/Fire 2.mp3', 2, 0.4);
-soundManager.preload('fire3', '/assets/sounds/Fire 3.mp3', 2, 0.5);
-soundManager.preload('fire4', '/assets/sounds/Fire 4.mp3', 2, 0.3);
-soundManager.preload('fire5', '/assets/sounds/Fire 5.mp3', 2, 0.5);
-soundManager.preload('fire6', '/assets/sounds/Fire 6.mp3', 2, 0.4);
+// Preload all sounds asynchronously
+(async () => {
+  // Reduced pool sizes to minimize lag
+  await soundManager.preload('fire1', '/assets/sounds/Fire 1.mp3', 2, 0.4);
+  await soundManager.preload('fire2', '/assets/sounds/Fire 2.mp3', 2, 0.4);
+  await soundManager.preload('fire3', '/assets/sounds/Fire 3.mp3', 2, 0.5);
+  await soundManager.preload('fire4', '/assets/sounds/Fire 4.mp3', 2, 0.3);
+  await soundManager.preload('fire5', '/assets/sounds/Fire 5.mp3', 2, 0.5);
+  await soundManager.preload('fire6', '/assets/sounds/Fire 6.mp3', 2, 0.4);
 
-// Hit and death sounds
-soundManager.preload('hit', '/assets/sounds/Hit 1.mp3', 2, 0.5);
-soundManager.preload('death', '/assets/sounds/Game Over.mp3', 1, 0.5);
+  // Hit and death sounds
+  await soundManager.preload('hit', '/assets/sounds/Hit 1.mp3', 2, 0.5);
+  await soundManager.preload('death', '/assets/sounds/Game Over.mp3', 1, 0.5);
+
+  console.log('✅ All sound effects loaded!');
+})();
 
 // Map weapons to specific sounds
 const weaponSounds = {
