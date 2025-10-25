@@ -142,62 +142,80 @@ app.post("/api/generate-mod", async (req, res) => {
     // Get Gemini API key from environment
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({
-        error: "Gemini API key not configured. Please set GEMINI_API_KEY environment variable."
+      console.warn(
+        "GEMINI_API_KEY not configured - AI code generation disabled",
+      );
+      return res.status(503).json({
+        error:
+          "AI code generation is not available. GEMINI_API_KEY environment variable is not set.",
       });
     }
 
     // Call Gemini API
-    const geminiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+    const geminiEndpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
     const systemPrompt = buildSystemPrompt();
     const fullPrompt = `${systemPrompt}\n\nUser Request:\n${prompt}`;
 
     const response = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: fullPrompt
-          }]
-        }],
+        contents: [
+          {
+            parts: [
+              {
+                text: fullPrompt,
+              },
+            ],
+          },
+        ],
         generationConfig: {
           temperature: 0.7,
           topK: 40,
           topP: 0.95,
           maxOutputTokens: 2048,
-        }
-      })
+        },
+      }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Gemini API error:", response.status, errorText);
       return res.status(response.status).json({
-        error: `Gemini API error: ${response.statusText}`
+        error: `Gemini API error: ${response.statusText}`,
       });
     }
 
     const data = await response.json();
 
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-      return res.status(500).json({ error: 'Invalid response from Gemini API' });
+    if (
+      !data.candidates ||
+      !data.candidates[0] ||
+      !data.candidates[0].content
+    ) {
+      return res
+        .status(500)
+        .json({ error: "Invalid response from Gemini API" });
     }
 
     const generatedText = data.candidates[0].content.parts[0].text;
 
     // Extract code from markdown blocks if present
-    const codeBlockMatch = generatedText.match(/```(?:javascript|js)?\s*([\s\S]*?)```/);
-    const code = codeBlockMatch ? codeBlockMatch[1].trim() : generatedText.trim();
+    const codeBlockMatch = generatedText.match(
+      /```(?:javascript|js)?\s*([\s\S]*?)```/,
+    );
+    const code = codeBlockMatch
+      ? codeBlockMatch[1].trim()
+      : generatedText.trim();
 
     res.json({ code });
-
   } catch (error) {
     console.error("Error in /api/generate-mod:", error);
     res.status(500).json({
-      error: error.message || "Failed to generate code"
+      error: error.message || "Failed to generate code",
     });
   }
 });
@@ -854,7 +872,9 @@ function createPlayer(id, name) {
 
 // Reset round - clears all scores and respawns everyone
 function resetRound(winnerId, winnerName) {
-  console.log(`🏆 ROUND OVER! Winner: ${winnerName} with ${GAME_CONFIG.SCORE_LIMIT} kills`);
+  console.log(
+    `🏆 ROUND OVER! Winner: ${winnerName} with ${GAME_CONFIG.SCORE_LIMIT} kills`,
+  );
 
   // Announce winner to all clients
   io.emit("roundOver", {
@@ -1261,7 +1281,8 @@ function gameLoop() {
       const proj = gameState.projectiles[i];
 
       // Move projectile
-      const moveDistance = Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy) * dt;
+      const moveDistance =
+        Math.sqrt(proj.vx * proj.vx + proj.vy * proj.vy) * dt;
       proj.x += proj.vx * dt;
       proj.y += proj.vy * dt;
       proj.distanceTraveled += moveDistance;
