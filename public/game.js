@@ -113,6 +113,7 @@ const modSystem = new ModSystem({
 
 const modEditor = new ModEditor(modSystem);
 modEditor.setSocket(socket); // Connect socket for server mods
+modEditor.setPlayerName(playerName); // Set initial player name
 
 // Auto-load enabled mods from manifest
 async function autoLoadMods() {
@@ -398,6 +399,7 @@ saveNameButton.addEventListener("click", () => {
   const newName = playerNameInput.value.trim();
   if (newName && newName.length > 0) {
     modSystem.setPlayerName(newName);
+    modEditor.setPlayerName(newName); // Update modEditor with new name
     console.log(`✅ Name changed to: ${newName}`);
 
     // Show feedback

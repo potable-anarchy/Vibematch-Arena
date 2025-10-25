@@ -1,5 +1,6 @@
 // In-game mod editor (non-intrusive)
 import { GeminiClient } from "./geminiClient.js";
+import { ModHUD } from "./modHUD.js";
 
 export class ModEditor {
   constructor(modSystem) {
@@ -8,6 +9,8 @@ export class ModEditor {
     this.currentMod = "";
     this.geminiClient = new GeminiClient();
     this.isGenerating = false;
+    this.modHUD = new ModHUD();
+    this.playerName = "Unknown"; // Will be set when socket connects
     this.createUI();
   }
 
@@ -338,6 +341,10 @@ export class ModEditor {
     this.setupSocketListeners();
   }
 
+  setPlayerName(name) {
+    this.playerName = name;
+  }
+
   setupSocketListeners() {
     if (!this.socket) return;
 
@@ -410,6 +417,9 @@ export class ModEditor {
         // Start 30-second auto-disable timer
         this.startModTimer(name);
 
+        // Add to HUD display
+        this.modHUD.addMod(name, this.playerName, 30000);
+
         // Save to server database for tracking
         if (this.socket) {
           this.socket.emit("saveClientMod", { name, code });
@@ -467,6 +477,7 @@ export class ModEditor {
     this.modTimers[name] = setTimeout(() => {
       this.modSystem.unloadMod(name);
       this.showStatus(`⏱️ Mod "${name}" auto-disabled after 30 seconds`, "#ffaa00");
+      // HUD will automatically remove the mod when timer expires
       delete this.modTimers[name];
     }, 30000);
 
@@ -494,6 +505,10 @@ export class ModEditor {
       }
 
       this.modSystem.unloadMod(name);
+
+      // Remove from HUD
+      this.modHUD.removeMod(name);
+
       this.showStatus(`🗑️ Mod "${name}" unloaded`, "#66ccff");
     }
   }
