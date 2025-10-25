@@ -930,16 +930,20 @@ function render(dt) {
   // Call mod render hooks
   modSystem.callHook("onRender", ctx, camera, dt);
 
-  // Spectator mode indicator (small label at top)
+  // Spectator mode indicator (below join button)
   if (!player && isSpectator) {
+    // Position below the join button (which is at bottom: 20px with some height)
+    // Join button is approximately 30-40px tall, so place indicator at about 70px from bottom
+    const indicatorY = canvas.height - 70;
+
     // Semi-transparent background for label
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    ctx.fillRect(canvas.width / 2 - 200, 10, 400, 50);
+    ctx.fillRect(canvas.width / 2 - 100, indicatorY - 20, 200, 35);
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.font = "bold 24px monospace";
+    ctx.font = "bold 16px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("SPECTATOR MODE", canvas.width / 2, 40);
+    ctx.fillText("SPECTATOR MODE", canvas.width / 2, indicatorY);
   }
 }
 
