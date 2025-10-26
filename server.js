@@ -36,13 +36,19 @@ const redisClient = createClient({
   },
 });
 
-redisClient.on("error", (err) => console.error("❌ Redis Client Error:", err));
+redisClient.on("error", (err) =>
+  console.error("❌ Redis Client Error:", err.message),
+);
 redisClient.on("connect", () => console.log("✅ Redis connected"));
 redisClient.on("ready", () => console.log("✅ Redis ready"));
 redisClient.on("reconnecting", () => console.log("🔄 Redis reconnecting..."));
 
-// Connect to Redis
-await redisClient.connect();
+// Connect to Redis (non-blocking)
+console.log("🔄 Connecting to Redis...");
+redisClient.connect().catch((err) => {
+  console.error("❌ Failed to connect to Redis:", err.message);
+  console.log("⚠️  Server will continue without Redis state persistence");
+});
 
 // ====== CRASH PREVENTION & ERROR HANDLING ======
 
@@ -958,6 +964,11 @@ const REDIS_KEYS = {
 
 // Sync game state to Redis (called every tick)
 async function syncStateToRedis() {
+  // Skip if Redis not ready
+  if (!redisClient.isReady) {
+    return;
+  }
+
   try {
     // Only sync essential state - not projectiles/sounds (too volatile)
     const state = {
@@ -1016,6 +1027,12 @@ async function syncStateToRedis() {
 
 // Restore game state from Redis on startup
 async function restoreStateFromRedis() {
+  // Skip if Redis not ready
+  if (!redisClient.isReady) {
+    console.log("⚠️  Redis not ready - skipping state restore");
+    return false;
+  }
+
   try {
     console.log("🔄 Attempting to restore game state from Redis...");
 
@@ -3804,8 +3821,10 @@ setInterval(() => {
 
 setInterval(gameLoop, TICK_INTERVAL);
 
-// Restore state from Redis before starting server
-await restoreStateFromRedis();
+// Restore state from Redis (non-blocking)
+restoreStateFromRedis().catch((err) =>
+  console.error("❌ Failed to restore state from Redis:", err.message),
+);
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
