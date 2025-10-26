@@ -515,7 +515,9 @@ Remember to start with "// BACKFIRE" on line 1!
     const errorText = await response.text();
     console.error("Gemini API error:", response.status, errorText);
 
-    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Gemini API error: ${response.status} ${response.statusText}`,
+    );
   }
 
   const data = await response.json();
@@ -544,9 +546,7 @@ Remember to start with "// BACKFIRE" on line 1!
   const codeBlockMatch = generatedText.match(
     /```(?:javascript|js)?\s*([\s\S]*?)```/,
   );
-  const code = codeBlockMatch
-    ? codeBlockMatch[1].trim()
-    : generatedText.trim();
+  const code = codeBlockMatch ? codeBlockMatch[1].trim() : generatedText.trim();
 
   // Detect backfire and mod type from the first lines
   let modType = "client"; // default to client
@@ -632,8 +632,14 @@ app.post("/api/generate-mod", async (req, res) => {
 
     // First attempt
     try {
-      console.log(`🎲 Mod generation attempt ${attempt} (backfire chance: ${currentBackfireChance * 100}%)`);
-      result = await attemptModGeneration(prompt, currentBackfireChance, apiKey);
+      console.log(
+        `🎲 Mod generation attempt ${attempt} (backfire chance: ${currentBackfireChance * 100}%)`,
+      );
+      result = await attemptModGeneration(
+        prompt,
+        currentBackfireChance,
+        apiKey,
+      );
     } catch (error) {
       lastError = error.message;
       console.error(`❌ Attempt ${attempt} failed:`, lastError);
@@ -648,10 +654,16 @@ app.post("/api/generate-mod", async (req, res) => {
       // Second attempt with doubled backfire chance
       attempt = 2;
       currentBackfireChance = BACKFIRE_CHANCE * 2;
-      console.log(`🔄 Retrying mod generation (attempt ${attempt}, backfire chance: ${currentBackfireChance * 100}%)`);
+      console.log(
+        `🔄 Retrying mod generation (attempt ${attempt}, backfire chance: ${currentBackfireChance * 100}%)`,
+      );
 
       try {
-        result = await attemptModGeneration(prompt, currentBackfireChance, apiKey);
+        result = await attemptModGeneration(
+          prompt,
+          currentBackfireChance,
+          apiKey,
+        );
       } catch (error2) {
         lastError = error2.message;
         console.error(`❌ Attempt ${attempt} failed:`, lastError);
@@ -664,17 +676,22 @@ app.post("/api/generate-mod", async (req, res) => {
         }
 
         // Both attempts failed - fallback to random working mod
-        console.log("🎰 Both attempts failed, picking random working mod from database...");
+        console.log(
+          "🎰 Both attempts failed, picking random working mod from database...",
+        );
         const randomMod = getRandomWorkingMod();
 
         if (randomMod) {
-          console.log(`✅ Using existing mod: ${randomMod.name} (type: ${randomMod.type})`);
+          console.log(
+            `✅ Using existing mod: ${randomMod.name} (type: ${randomMod.type})`,
+          );
           result = {
             code: randomMod.code,
             type: randomMod.type,
             backfire: false,
             fallback: true,
-            fallbackMessage: "⚠️ Generation failed - using a random existing mod instead!"
+            fallbackMessage:
+              "⚠️ Generation failed - using a random existing mod instead!",
           };
         } else {
           // No working mods in database - final failure
@@ -870,22 +887,18 @@ const PICKUP_TYPES = {
   weapon_rifle: { weapon: "rifle", respawn: 25000 },
 };
 
-// Available mods for purchase (bots can buy these)
-const AVAILABLE_MODS = [
-  { id: "better-hud-v2", name: "Better HUD v2", file: "better-hud-v2.js", cost: 10 },
-  { id: "minimap-v2", name: "Minimap v2", file: "minimap-v2.js", cost: 10 },
-  { id: "damage-numbers", name: "Damage Numbers", file: "example-damage-numbers.js", cost: 10 },
-  { id: "rainbow-trail", name: "Rainbow Trail", file: "example-rainbow-trail.js", cost: 10 },
-];
-
 // Function to try to purchase a mod for a bot
 function tryPurchaseModForBot(bot) {
   // Only purchase if bot has enough credits
   if (bot.credits < 10) return false;
 
+  // Get all client-side mods from database
+  const allMods = getAllMods();
+  const clientMods = allMods.filter((mod) => mod.type === "client");
+
   // Get mods the bot doesn't already have
-  const availableToPurchase = AVAILABLE_MODS.filter(
-    mod => !bot.activeMods.includes(mod.id)
+  const availableToPurchase = clientMods.filter(
+    (mod) => !bot.activeMods.includes(mod.id),
   );
 
   if (availableToPurchase.length === 0) return false;
@@ -893,13 +906,17 @@ function tryPurchaseModForBot(bot) {
   // Randomly select a mod (30% chance to purchase when checked)
   if (Math.random() > 0.3) return false;
 
-  const selectedMod = availableToPurchase[Math.floor(Math.random() * availableToPurchase.length)];
+  const selectedMod =
+    availableToPurchase[Math.floor(Math.random() * availableToPurchase.length)];
 
-  // Purchase the mod
-  bot.credits -= selectedMod.cost;
+  // Purchase the mod (assume cost of 10 credits)
+  const modCost = 10;
+  bot.credits -= modCost;
   bot.activeMods.push(selectedMod.id);
 
-  console.log(`🤖 Bot ${bot.name} purchased ${selectedMod.name} (${bot.credits} credits remaining)`);
+  console.log(
+    `🤖 Bot ${bot.name} purchased ${selectedMod.name} (${bot.credits} credits remaining)`,
+  );
 
   // Broadcast the mod activation to all clients
   io.emit("modActivated", {
@@ -907,7 +924,7 @@ function tryPurchaseModForBot(bot) {
     entityName: bot.name,
     modId: selectedMod.id,
     modName: selectedMod.name,
-    modFile: selectedMod.file,
+    modCode: selectedMod.code,
   });
 
   return true;
