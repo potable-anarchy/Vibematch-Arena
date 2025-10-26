@@ -268,6 +268,7 @@ let mouseY = 0;
 // Visual effects
 let effects = [];
 let particles = [];
+let bloodstains = []; // Permanent bloodstains from deaths
 
 // Setup canvas
 let resizeTimeout;
@@ -729,10 +730,15 @@ function getInterpolatedState() {
   const timeSinceUpdate = now - serverStateTime;
   const t = Math.min(1, timeSinceUpdate / INTERPOLATION_TIME); // 0 to 1
 
-  // Interpolate player positions
+  // Interpolate player positions (but skip dead players to avoid flying corpses)
   const interpolatedPlayers = gameState.players.map((player) => {
     const lastPlayer = lastServerState.players.find((p) => p.id === player.id);
     if (!lastPlayer) return player;
+
+    // Don't interpolate dead players - prevents them from flying across map during respawn
+    if (player.health <= 0 || lastPlayer.health <= 0) {
+      return player;
+    }
 
     return {
       ...player,
@@ -778,6 +784,8 @@ socket.on("hit", (data) => {
     if (data.killed) {
       showKillMessage(data.shooterId, data.targetId, data.headshot);
       modSystem.callHook("onKill", data.shooterId, data.targetId);
+      // Create bloodstain at death location
+      createBloodstain(target.x, target.y);
     }
     modSystem.callHook(
       "onHit",
@@ -1304,6 +1312,20 @@ function createWallPenetrationEffect(x, y, angle) {
   }
 }
 
+function createBloodstain(x, y) {
+  const bloodSprite = assets.get("blood_splat");
+  if (bloodSprite && bloodSprite.complete) {
+    bloodstains.push({
+      x,
+      y,
+      angle: Math.random() * Math.PI * 2,
+      scale: 0.4 + Math.random() * 0.3,
+      createdAt: Date.now(),
+      duration: 5000, // 5 seconds
+    });
+  }
+}
+
 // Render loop
 function render(dt) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1369,6 +1391,9 @@ function render(dt) {
       drawPickup(pickup);
     }
   });
+
+  // Draw bloodstains (permanent decals from deaths)
+  drawBloodstains();
 
   // Draw effects (blood splatters should be under players)
   drawEffects(dt);
@@ -1678,6 +1703,40 @@ function drawPlayer(p) {
       ctx.fillStyle = "#ffd700"; // Gold color
       ctx.fillRect(barX, barY + 6, barWidth * ammoPercent, barHeight);
     }
+  }
+}
+
+function drawBloodstains() {
+  const now = Date.now();
+  const bloodSprite = assets.get("blood_splat");
+
+  // Remove expired bloodstains
+  bloodstains = bloodstains.filter((stain) => {
+    return now - stain.createdAt < stain.duration;
+  });
+
+  // Draw bloodstains
+  if (bloodSprite && bloodSprite.complete) {
+    bloodstains.forEach((stain) => {
+      const screenX = worldToScreenX(stain.x);
+      const screenY = worldToScreenY(stain.y);
+
+      // Calculate fade out effect in final second
+      const timeLeft = stain.duration - (now - stain.createdAt);
+      const alpha = timeLeft < 1000 ? timeLeft / 1000 : 1.0;
+
+      ctx.save();
+      ctx.translate(screenX, screenY);
+      ctx.rotate(stain.angle);
+      ctx.globalAlpha = alpha * 0.8; // Semi-transparent
+
+      const width = bloodSprite.width * stain.scale;
+      const height = bloodSprite.height * stain.scale;
+      ctx.drawImage(bloodSprite, -width / 2, -height / 2, width, height);
+
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    });
   }
 }
 
