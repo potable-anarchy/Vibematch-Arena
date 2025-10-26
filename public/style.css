@@ -393,35 +393,35 @@ body {
 /* Killfeed */
 .killfeed {
     position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 55px;
+    right: 10px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 5px;
+    align-items: flex-end;
+    gap: 3px;
     pointer-events: none;
+    max-width: 300px;
 }
 
 .kill-message {
-    background: rgba(20, 20, 30, 0.9);
-    border: 2px solid #ff3366;
-    padding: 10px 20px;
-    border-radius: 5px;
-    font-size: 14px;
-    animation:
-        fadeIn 0.3s,
-        fadeOut 0.5s 2.5s;
+    background: rgba(20, 20, 30, 0.85);
+    border-left: 3px solid #ff3366;
+    padding: 6px 12px;
+    border-radius: 3px;
+    font-size: 12px;
+    animation: slideInRight 0.3s ease-out, fadeOut 0.5s 4.5s;
+    white-space: nowrap;
+    text-align: right;
 }
 
-@keyframes fadeIn {
+@keyframes slideInRight {
     from {
         opacity: 0;
-        transform: translateY(-20px);
+        transform: translateX(100px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateX(0);
     }
 }
 

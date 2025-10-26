@@ -762,16 +762,24 @@ function showKillMessage(killerId, victimId, isHeadshot = false) {
   }
 
   if (killerId === playerId) {
-    message.style.borderColor = "#66ccff";
+    message.style.borderLeftColor = "#66ccff";
   } else if (victimId === playerId) {
-    message.style.borderColor = "#ff3366";
+    message.style.borderLeftColor = "#ff3366";
   }
 
   killfeed.appendChild(message);
 
+  // Limit number of messages displayed (keep last 5)
+  const MAX_MESSAGES = 5;
+  const messages = killfeed.querySelectorAll(".kill-message");
+  if (messages.length > MAX_MESSAGES) {
+    messages[0].remove();
+  }
+
+  // Remove message after 5 seconds (matches CSS animation)
   setTimeout(() => {
     message.remove();
-  }, 3000);
+  }, 5000);
 }
 
 // Show round over message
