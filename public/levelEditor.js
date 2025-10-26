@@ -384,10 +384,6 @@ export class LevelEditor {
         health_big: "#ff3366",
         armor_light: "#99ddff",
         armor_heavy: "#66ccff",
-        ammo: "#ffaa00",
-        weapon_smg: "#9966ff",
-        weapon_shotgun: "#ff9933",
-        weapon_rifle: "#cc6633",
       };
 
       this.ctx.fillStyle = colors[pickup.type] || "#ffffff";
@@ -405,10 +401,6 @@ export class LevelEditor {
         health_big: "++",
         armor_light: "A",
         armor_heavy: "A+",
-        ammo: "O",
-        weapon_smg: "S",
-        weapon_shotgun: "SG",
-        weapon_rifle: "R",
       };
       this.ctx.fillText(symbols[pickup.type] || "?", x, y);
     });
