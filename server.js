@@ -1060,8 +1060,10 @@ const gameState = {
   players: new Map(),
   bots: new Map(),
   projectiles: [],
+  grenades: [], // Active grenades in the world
   pickups: [],
   nextProjectileId: 0,
+  nextGrenadeId: 0,
   nextPickupId: 0,
   nextBotId: 0,
   soundEvents: [], // Sound events for bots to hear (gunshots, footsteps)
@@ -1348,6 +1350,18 @@ const WEAPONS = {
   },
 };
 
+// Grenade config
+const GRENADE_CONFIG = {
+  FUSE_TIME: 3000, // 3 second fuse in milliseconds
+  THROW_COOLDOWN: 500, // 0.5 second cooldown between throws
+  BASE_VELOCITY: 400, // Base throw velocity (pixels/second)
+  MAX_VELOCITY: 800, // Maximum throw velocity at full power (pixels/second)
+  GRAVITY: 150, // Gravity acceleration (pixels/second^2) - reduced for better throwing
+  BLAST_RADIUS: 200, // Explosion radius in pixels
+  MAX_DAMAGE: 100, // Maximum damage at epicenter
+  MIN_DAMAGE: 30, // Minimum damage at edge of blast radius
+};
+
 // Pickup configs
 const PICKUP_TYPES = {
   health_small: { amount: 25, respawn: 15000 },
@@ -1358,6 +1372,7 @@ const PICKUP_TYPES = {
   weapon_smg: { weapon: "smg", respawn: 15000 },
   weapon_shotgun: { weapon: "shotgun", respawn: 20000 },
   weapon_rifle: { weapon: "rifle", respawn: 25000 },
+  grenade: { amount: 2, respawn: 30000 }, // Grenade pickup
 };
 
 // Function to try to purchase a mod for a bot
@@ -1541,6 +1556,13 @@ function initializePickups() {
     { x: 1000, y: 300, type: "weapon_rifle" },
     { x: 1000, y: 1700, type: "weapon_rifle" },
     { x: 1000, y: 1000, type: "weapon_rifle" },
+
+    // Grenade pickups
+    { x: 500, y: 500, type: "grenade" },
+    { x: 1500, y: 500, type: "grenade" },
+    { x: 500, y: 1500, type: "grenade" },
+    { x: 1500, y: 1500, type: "grenade" },
+    { x: 1000, y: 1000, type: "grenade" },
   ];
 
   pickupSpawns.forEach((spawn) => {
@@ -1919,11 +1941,13 @@ function createBot() {
     weapon: "pistol",
     ammo: WEAPONS.pistol.mag,
     maxAmmo: WEAPONS.pistol.mag,
+    grenades: 0, // Bots start with 0 grenades, must pick them up
     kills: 0,
     deaths: 0,
     credits: 0,
     activeMods: [],
     lastShot: 0,
+    lastGrenadeThrow: 0,
     reloading: false,
     reloadFinish: 0,
     invulnerable: Date.now() + GAME_CONFIG.SPAWN_INVULN_TIME,
@@ -2006,11 +2030,13 @@ function createPlayer(id, name) {
     weapon: "pistol",
     ammo: WEAPONS.pistol.mag,
     maxAmmo: WEAPONS.pistol.mag,
+    grenades: 3, // Start with 3 grenades
     kills: 0,
     deaths: 0,
     credits: 0,
     activeMods: [],
     lastShot: 0,
+    lastGrenadeThrow: 0,
     reloading: false,
     reloadFinish: 0,
     invulnerable: Date.now() + GAME_CONFIG.SPAWN_INVULN_TIME,
@@ -2485,6 +2511,11 @@ io.on("connection", (socket) => {
         player.reloading = true;
         player.reloadFinish = Date.now() + weapon.reload * 1000;
       }
+
+      // Grenade throwing
+      if (input.throwGrenade && input.grenadePower !== undefined) {
+        throwGrenade(player, input.grenadePower);
+      }
     } catch (error) {
       console.error("❌ Error in input handler:", error);
     }
@@ -2917,6 +2948,185 @@ function createProjectile(x, y, angle, weapon, shooterId, weaponName) {
   gameState.projectiles.push(projectile);
 }
 
+// Throw a grenade
+function throwGrenade(player, power) {
+  const now = Date.now();
+
+  // Check cooldown
+  if (now - player.lastGrenadeThrow < GRENADE_CONFIG.THROW_COOLDOWN) {
+    return;
+  }
+
+  // Check if player has grenades
+  if (player.grenades <= 0) {
+    return;
+  }
+
+  player.lastGrenadeThrow = now;
+  player.grenades--;
+
+  // Calculate velocity based on power (0 to 1)
+  const velocity = GRENADE_CONFIG.BASE_VELOCITY +
+    (GRENADE_CONFIG.MAX_VELOCITY - GRENADE_CONFIG.BASE_VELOCITY) * power;
+
+  const grenade = {
+    id: gameState.nextGrenadeId++,
+    x: player.x,
+    y: player.y,
+    vx: Math.cos(player.aimAngle) * velocity,
+    vy: Math.sin(player.aimAngle) * velocity,
+    throwerId: player.id,
+    throwerName: player.name,
+    throwTime: now,
+    detonateTime: now + GRENADE_CONFIG.FUSE_TIME,
+    power: power,
+  };
+
+  gameState.grenades.push(grenade);
+
+  console.log(`💣 ${player.name} threw grenade with power ${Math.round(power * 100)}%`);
+
+  io.emit("grenadeThrown", {
+    id: grenade.id,
+    x: grenade.x,
+    y: grenade.y,
+    vx: grenade.vx,
+    vy: grenade.vy,
+    throwerId: player.id,
+    detonateTime: grenade.detonateTime,
+  });
+}
+
+// Detonate grenade and apply damage
+function detonateGrenade(grenade) {
+  // Find all entities within blast radius
+  const damagedEntities = [];
+
+  // Check players
+  for (const [id, player] of gameState.players) {
+    if (player.health <= 0) continue;
+
+    const dx = player.x - grenade.x;
+    const dy = player.y - grenade.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance <= GRENADE_CONFIG.BLAST_RADIUS) {
+      // Calculate damage based on distance (inverse linear falloff)
+      const damagePercent = 1 - (distance / GRENADE_CONFIG.BLAST_RADIUS);
+      const damage = GRENADE_CONFIG.MIN_DAMAGE +
+        (GRENADE_CONFIG.MAX_DAMAGE - GRENADE_CONFIG.MIN_DAMAGE) * damagePercent;
+
+      // Apply damage (armor absorbs first)
+      let actualDamage = damage;
+      if (player.armor > 0) {
+        const armorAbsorb = Math.min(player.armor, damage);
+        player.armor -= armorAbsorb;
+        actualDamage -= armorAbsorb;
+      }
+      player.health -= actualDamage;
+
+      damagedEntities.push({
+        id: player.id,
+        name: player.name,
+        damage: Math.round(damage),
+        distance: Math.round(distance),
+      });
+
+      // Check for kill
+      if (player.health <= 0) {
+        player.deaths++;
+        player.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
+
+        const thrower = gameState.players.get(grenade.throwerId) ||
+          gameState.bots.get(grenade.throwerId);
+
+        if (thrower && grenade.throwerId !== player.id) {
+          thrower.kills++;
+          io.emit("kill", {
+            killerId: grenade.throwerId,
+            killerName: grenade.throwerName,
+            victimId: player.id,
+            victimName: player.name,
+            weapon: "grenade",
+          });
+        } else if (grenade.throwerId === player.id) {
+          // Suicide
+          io.emit("kill", {
+            killerId: player.id,
+            killerName: player.name,
+            victimId: player.id,
+            victimName: player.name,
+            weapon: "grenade (suicide)",
+          });
+        }
+      }
+    }
+  }
+
+  // Check bots
+  for (const [id, bot] of gameState.bots) {
+    if (bot.health <= 0) continue;
+
+    const dx = bot.x - grenade.x;
+    const dy = bot.y - grenade.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance <= GRENADE_CONFIG.BLAST_RADIUS) {
+      const damagePercent = 1 - (distance / GRENADE_CONFIG.BLAST_RADIUS);
+      const damage = GRENADE_CONFIG.MIN_DAMAGE +
+        (GRENADE_CONFIG.MAX_DAMAGE - GRENADE_CONFIG.MIN_DAMAGE) * damagePercent;
+
+      let actualDamage = damage;
+      if (bot.armor > 0) {
+        const armorAbsorb = Math.min(bot.armor, damage);
+        bot.armor -= armorAbsorb;
+        actualDamage -= armorAbsorb;
+      }
+      bot.health -= actualDamage;
+
+      damagedEntities.push({
+        id: bot.id,
+        name: bot.name,
+        damage: Math.round(damage),
+        distance: Math.round(distance),
+      });
+
+      if (bot.health <= 0) {
+        bot.deaths++;
+        bot.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
+
+        const thrower = gameState.players.get(grenade.throwerId) ||
+          gameState.bots.get(grenade.throwerId);
+
+        if (thrower && grenade.throwerId !== bot.id) {
+          thrower.kills++;
+          io.emit("kill", {
+            killerId: grenade.throwerId,
+            killerName: grenade.throwerName,
+            victimId: bot.id,
+            victimName: bot.name,
+            weapon: "grenade",
+          });
+        }
+      }
+    }
+  }
+
+  // Emit explosion event
+  io.emit("grenadeExplode", {
+    id: grenade.id,
+    x: grenade.x,
+    y: grenade.y,
+    radius: GRENADE_CONFIG.BLAST_RADIUS,
+    damaged: damagedEntities,
+  });
+
+  console.log(`💥 Grenade exploded! Hit ${damagedEntities.length} entities`);
+
+  // Create sound event for bots
+  createSoundEvent(grenade.x, grenade.y, "explosion", grenade.throwerId);
+}
+
 // Game loop
 const TICK_INTERVAL = 1000 / GAME_CONFIG.TICK_RATE;
 const STATE_BROADCAST_INTERVAL = 1000 / 30; // Broadcast state 30 times per second
@@ -3201,6 +3411,109 @@ function gameLoop() {
       if (hitSomething) {
         gameState.projectiles.splice(i, 1);
         continue;
+      }
+    }
+
+    // Update grenades
+    for (let i = gameState.grenades.length - 1; i >= 0; i--) {
+      const grenade = gameState.grenades[i];
+
+      // Check if grenade should detonate (fuse expired)
+      if (now >= grenade.detonateTime) {
+        detonateGrenade(grenade);
+        gameState.grenades.splice(i, 1);
+        continue;
+      }
+
+      // Apply physics - gravity and velocity
+      grenade.vy += GRENADE_CONFIG.GRAVITY * dt; // Apply gravity
+      grenade.x += grenade.vx * dt;
+      grenade.y += grenade.vy * dt;
+
+      // Check wall/obstacle collisions - grenades bounce
+      const GRENADE_RADIUS = 5;
+      for (const wall of WALLS) {
+        if (
+          circleRectCollision(
+            grenade.x,
+            grenade.y,
+            GRENADE_RADIUS,
+            wall.x,
+            wall.y,
+            wall.width,
+            wall.height,
+          )
+        ) {
+          // Simple bounce - reverse velocity and dampen
+          // Determine which side we hit
+          const wallCenterX = wall.x + wall.width / 2;
+          const wallCenterY = wall.y + wall.height / 2;
+          const dx = grenade.x - wallCenterX;
+          const dy = grenade.y - wallCenterY;
+
+          if (Math.abs(dx / wall.width) > Math.abs(dy / wall.height)) {
+            // Hit left or right side
+            grenade.vx = -grenade.vx * 0.5;
+            grenade.x += grenade.vx * dt * 2; // Move away from wall
+          } else {
+            // Hit top or bottom
+            grenade.vy = -grenade.vy * 0.5;
+            grenade.y += grenade.vy * dt * 2; // Move away from wall
+          }
+
+          // Emit bounce sound
+          io.emit("grenadeBounce", {
+            id: grenade.id,
+            x: grenade.x,
+            y: grenade.y,
+          });
+          break;
+        }
+      }
+
+      // Check crate collisions
+      for (const crate of CRATES) {
+        if (
+          circleRectCollision(
+            grenade.x,
+            grenade.y,
+            GRENADE_RADIUS,
+            crate.x,
+            crate.y,
+            crate.size,
+            crate.size,
+          )
+        ) {
+          const crateCenterX = crate.x + crate.size / 2;
+          const crateCenterY = crate.y + crate.size / 2;
+          const dx = grenade.x - crateCenterX;
+          const dy = grenade.y - crateCenterY;
+
+          if (Math.abs(dx / crate.size) > Math.abs(dy / crate.size)) {
+            grenade.vx = -grenade.vx * 0.5;
+            grenade.x += grenade.vx * dt * 2;
+          } else {
+            grenade.vy = -grenade.vy * 0.5;
+            grenade.y += grenade.vy * dt * 2;
+          }
+
+          io.emit("grenadeBounce", {
+            id: grenade.id,
+            x: grenade.x,
+            y: grenade.y,
+          });
+          break;
+        }
+      }
+
+      // Keep grenades in world bounds
+      if (grenade.x < 0 || grenade.x > GAME_CONFIG.WORLD_WIDTH) {
+        grenade.vx = -grenade.vx * 0.5;
+        grenade.x = Math.max(0, Math.min(GAME_CONFIG.WORLD_WIDTH, grenade.x));
+      }
+      if (grenade.y < 0 || grenade.y > GAME_CONFIG.WORLD_HEIGHT) {
+        grenade.vy = -grenade.vy * 0.5;
+        grenade.y = Math.max(0, Math.min(GAME_CONFIG.WORLD_HEIGHT, grenade.y));
       }
     }
 
@@ -3494,6 +3807,24 @@ function gameLoop() {
                 hasLineOfSight(bot.x, bot.y, nearestTarget.x, nearestTarget.y)
               ) {
                 handleShoot(bot);
+              }
+            }
+
+            // Grenade throwing logic - bots will throw grenades tactically
+            if (bot.grenades && bot.grenades > 0) {
+              // Consider throwing grenade if:
+              // 1. Enemy is at medium-long range (150-400 pixels)
+              // 2. Bot has line of sight
+              // 3. Random chance (20% per think cycle)
+              const grenadeRange = nearestDist >= 150 && nearestDist <= 400;
+              const hasLOS = hasLineOfSight(bot.x, bot.y, nearestTarget.x, nearestTarget.y);
+
+              if (grenadeRange && hasLOS && Math.random() < 0.2) {
+                // Calculate power based on distance (closer = less power)
+                const powerPercent = Math.min(1.0, (nearestDist - 150) / 250);
+                const power = 0.3 + powerPercent * 0.7; // 30-100% power
+
+                throwGrenade(bot, power);
               }
             }
           }
@@ -3837,6 +4168,10 @@ function gameLoop() {
               bot.ammo + Math.floor(WEAPONS[bot.weapon].mag * 0.4),
             );
             collected = true;
+          } else if (pickup.type === "grenade") {
+            // Grenade pickup
+            bot.grenades = (bot.grenades || 0) + config.amount;
+            collected = true;
           } else if (pickup.type.startsWith("weapon_")) {
             // Weapon pickup
             const newWeapon = config.weapon;
@@ -3997,6 +4332,10 @@ function gameLoop() {
               player.ammo + Math.floor(WEAPONS[player.weapon].mag * 0.4),
             );
             collected = true;
+          } else if (pickup.type === "grenade") {
+            // Grenade pickup
+            player.grenades = (player.grenades || 0) + config.amount;
+            collected = true;
           } else if (pickup.type.startsWith("weapon_")) {
             // Weapon pickup
             const newWeapon = config.weapon;
@@ -4074,6 +4413,7 @@ function gameLoop() {
           armor: Math.round(p.armor),
           weapon: p.weapon,
           ammo: p.ammo,
+          grenades: p.grenades || 0,
           kills: p.kills,
           deaths: p.deaths,
           reloading: p.reloading,
@@ -4092,6 +4432,12 @@ function gameLoop() {
           x: Math.round(p.x),
           y: Math.round(p.y),
           angle: Math.round(p.angle * 100) / 100,
+        })),
+        grenades: gameState.grenades.map((g) => ({
+          id: g.id,
+          x: Math.round(g.x),
+          y: Math.round(g.y),
+          detonateTime: g.detonateTime,
         })),
         activeMods: modsForBroadcast,
         gameMode: gameState.gameMode,

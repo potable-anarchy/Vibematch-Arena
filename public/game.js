@@ -247,7 +247,7 @@ let gameState = {
 };
 
 // Interpolation for smooth movement
-let lastServerState = { players: [], pickups: [], projectiles: [] };
+let lastServerState = { players: [], pickups: [], projectiles: [], grenades: [] };
 let serverStateTime = Date.now();
 const INTERPOLATION_TIME = 100; // ms - how long to interpolate
 
@@ -259,8 +259,15 @@ let input = {
   right: false,
   shoot: false,
   reload: false,
+  throwGrenade: false,
   aimAngle: 0,
 };
+
+// Grenade throw power (0 to 1)
+let grenadePower = 0;
+let grenadeChargeStartTime = 0;
+const MAX_GRENADE_POWER = 1.0;
+const GRENADE_CHARGE_TIME = 2000; // 2 seconds to reach full power
 
 let mouseX = 0;
 let mouseY = 0;
@@ -349,6 +356,13 @@ document.addEventListener("keydown", (e) => {
     case "r":
       input.reload = true;
       break;
+    case "g":
+      if (!input.throwGrenade) {
+        input.throwGrenade = true;
+        grenadeChargeStartTime = Date.now();
+        grenadePower = 0;
+      }
+      break;
   }
 });
 
@@ -368,6 +382,15 @@ document.addEventListener("keyup", (e) => {
       break;
     case "r":
       input.reload = false;
+      break;
+    case "g":
+      if (input.throwGrenade) {
+        // Calculate final power based on hold duration
+        const holdDuration = Date.now() - grenadeChargeStartTime;
+        grenadePower = Math.min(MAX_GRENADE_POWER, holdDuration / GRENADE_CHARGE_TIME);
+        input.throwGrenade = false;
+        // Power will be sent with the input to server
+      }
       break;
   }
 });
@@ -813,6 +836,33 @@ socket.on("wallPenetration", (data) => {
   createWallPenetrationEffect(data.x, data.y, data.angle);
 });
 
+// Grenade events
+socket.on("grenadeThrown", (data) => {
+  console.log("Grenade thrown:", data);
+});
+
+socket.on("grenadeBounce", (data) => {
+  // Create small bounce particle effect
+  for (let i = 0; i < 3; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 40 + Math.random() * 40;
+    particles.push({
+      x: data.x,
+      y: data.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0.3,
+      maxLife: 0.3,
+      color: "#888888",
+      size: 2,
+    });
+  }
+});
+
+socket.on("grenadeExplode", (data) => {
+  createExplosionEffect(data.x, data.y, data.radius);
+});
+
 socket.on("respawn", (data) => {
   if (data.playerId === playerId) {
     respawnMessage.style.display = "none";
@@ -928,7 +978,14 @@ setInterval(() => {
   const screenCenterY = canvas.height / 2;
   input.aimAngle = Math.atan2(mouseY - screenCenterY, mouseX - screenCenterX);
 
-  socket.emit("input", input);
+  // Update grenade power if charging
+  if (input.throwGrenade) {
+    const holdDuration = Date.now() - grenadeChargeStartTime;
+    grenadePower = Math.min(MAX_GRENADE_POWER, holdDuration / GRENADE_CHARGE_TIME);
+  }
+
+  // Send input with grenade power
+  socket.emit("input", { ...input, grenadePower });
 }, 1000 / 60);
 
 // Update HUD
@@ -1326,6 +1383,51 @@ function createBloodstain(x, y) {
   }
 }
 
+function createExplosionEffect(x, y, radius) {
+  // Large explosion flash
+  effects.push({
+    type: "explosionFlash",
+    x,
+    y,
+    radius,
+    life: 0.3,
+    maxLife: 0.3,
+  });
+
+  // Create explosion particles in all directions
+  const particleCount = 60;
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.2;
+    const speed = 200 + Math.random() * 300;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0.6 + Math.random() * 0.4,
+      maxLife: 1.0,
+      color: i % 3 === 0 ? "#ff6600" : (i % 3 === 1 ? "#ffaa00" : "#ff0000"),
+      size: 3 + Math.random() * 4,
+    });
+  }
+
+  // Add smoke particles
+  for (let i = 0; i < 20; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 50 + Math.random() * 100;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 50, // Float upward
+      life: 1.0 + Math.random() * 0.5,
+      maxLife: 1.5,
+      color: "#444444",
+      size: 4 + Math.random() * 6,
+    });
+  }
+}
+
 // Render loop
 function render(dt) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1403,6 +1505,9 @@ function render(dt) {
 
   // Draw projectiles
   drawProjectiles();
+
+  // Draw grenades
+  drawGrenades();
 
   // Update and draw players (using interpolated positions)
   renderState.players.forEach((p) => {
@@ -1657,6 +1762,30 @@ function drawPlayer(p) {
 
   ctx.restore();
 
+  // Grenade power bar (only for local player when charging)
+  if (isLocalPlayer && input.throwGrenade && grenadePower > 0) {
+    const powerBarWidth = 50;
+    const powerBarHeight = 6;
+    const powerBarX = screenX - powerBarWidth / 2;
+    const powerBarY = screenY - (gameConfig?.PLAYER_RADIUS || 30) - 25;
+
+    // Background
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(powerBarX, powerBarY, powerBarWidth, powerBarHeight);
+
+    // Power fill (yellow gradient)
+    const gradient = ctx.createLinearGradient(powerBarX, 0, powerBarX + powerBarWidth, 0);
+    gradient.addColorStop(0, "#ffff00");
+    gradient.addColorStop(1, "#ff9900");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(powerBarX, powerBarY, powerBarWidth * grenadePower, powerBarHeight);
+
+    // Border
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(powerBarX, powerBarY, powerBarWidth, powerBarHeight);
+  }
+
   // Name with player color
   const playerRadius = gameConfig?.PLAYER_RADIUS || 30;
   ctx.fillStyle = isLocalPlayer ? "#ffff00" : "#fff";
@@ -1803,6 +1932,34 @@ function drawEffects(dt) {
 
       ctx.globalAlpha = 1;
       ctx.restore();
+    } else if (effect.type === "explosionFlash") {
+      const screenX = worldToScreenX(effect.x);
+      const screenY = worldToScreenY(effect.y);
+
+      // Large expanding circle of fire
+      ctx.save();
+      const explosionAlpha = alpha * 0.8;
+      const explosionRadius = effect.radius * (1.5 - alpha * 0.5); // Expands then fades
+
+      // Outer ring - orange
+      ctx.fillStyle = `rgba(255, 140, 0, ${explosionAlpha * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, explosionRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Middle ring - bright yellow
+      ctx.fillStyle = `rgba(255, 220, 0, ${explosionAlpha})`;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, explosionRadius * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner core - white hot
+      ctx.fillStyle = `rgba(255, 255, 255, ${explosionAlpha})`;
+      ctx.beginPath();
+      ctx.arc(screenX, screenY, explosionRadius * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
     }
 
     return true;
@@ -1859,6 +2016,75 @@ function drawProjectiles() {
 
     ctx.shadowBlur = 0;
     ctx.restore();
+  });
+}
+
+function drawGrenades() {
+  if (!gameState.grenades) return;
+
+  const now = Date.now();
+
+  gameState.grenades.forEach((grenade) => {
+    const screenX = worldToScreenX(grenade.x);
+    const screenY = worldToScreenY(grenade.y);
+
+    // Calculate time until detonation
+    const timeRemaining = grenade.detonateTime - now;
+    const fusePercent = timeRemaining / 3000; // 3 second fuse
+
+    // Color shifts from yellow to red as fuse burns down
+    let r, g, b;
+    if (fusePercent > 0.66) {
+      // Yellow (100% to 66% remaining)
+      r = 255;
+      g = 255;
+      b = 0;
+    } else if (fusePercent > 0.33) {
+      // Orange (66% to 33% remaining)
+      r = 255;
+      g = Math.floor(165 + (90 * (fusePercent - 0.33) / 0.33));
+      b = 0;
+    } else {
+      // Red (33% to 0% remaining)
+      r = 255;
+      g = Math.floor(165 * (fusePercent / 0.33));
+      b = 0;
+    }
+
+    // Pulse effect - pulses once per second
+    const pulseTime = timeRemaining % 1000; // 0-1000ms cycle
+    const pulseAmount = Math.sin((pulseTime / 1000) * Math.PI); // 0 to 1 to 0
+    const size = 6 + pulseAmount * 3; // 6-9px radius
+
+    // Draw grenade with glow
+    ctx.save();
+    ctx.shadowColor = `rgb(${r}, ${g}, ${b})`;
+    ctx.shadowBlur = 10 + pulseAmount * 5;
+
+    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner core
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, size * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Draw fuse timer text if close to detonation
+    if (fusePercent < 0.5) {
+      ctx.save();
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+      ctx.font = "bold 10px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(Math.ceil(timeRemaining / 1000).toString(), screenX, screenY + size + 2);
+      ctx.restore();
+    }
   });
 }
 
