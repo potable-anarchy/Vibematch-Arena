@@ -50,6 +50,25 @@ db.exec(`
   )
 `);
 
+// Migration: Add new columns if they don't exist
+// Check if target_scope column exists
+const tableInfo = db.pragma('table_info(active_mods)');
+const hasTargetScope = tableInfo.some(col => col.name === 'target_scope');
+
+if (!hasTargetScope) {
+  console.log("🔄 Migrating active_mods table to add new columns...");
+  db.exec(`
+    ALTER TABLE active_mods ADD COLUMN target_scope TEXT DEFAULT 'player';
+  `);
+  db.exec(`
+    ALTER TABLE active_mods ADD COLUMN target_player_id TEXT;
+  `);
+  db.exec(`
+    ALTER TABLE active_mods ADD COLUMN target_player_name TEXT;
+  `);
+  console.log("✅ Migration completed");
+}
+
 // Create index for active mods queries
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_active_mods_expiry
