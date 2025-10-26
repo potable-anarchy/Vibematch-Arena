@@ -924,6 +924,11 @@ socket.on("hit", (data) => {
       modSystem.callHook("onKill", data.shooterId, data.targetId);
       // Create bloodstain at death location
       createBloodstain(target.x, target.y);
+
+      // Reduce mod generation cooldown if we got the kill
+      if (data.shooterId === playerId) {
+        modEditor.reduceKillCooldown();
+      }
     }
     modSystem.callHook(
       "onHit",

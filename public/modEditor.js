@@ -9,6 +9,12 @@ export class ModEditor {
     this.geminiClient = new GeminiClient();
     this.modHUD = new ModHUD();
     this.playerName = "Unknown";
+
+    // Cooldown system
+    this.cooldownSeconds = 45;
+    this.cooldownRemaining = 0;
+    this.cooldownInterval = null;
+
     this.createUI();
   }
 
@@ -196,6 +202,18 @@ export class ModEditor {
       return;
     }
 
+    // Check cooldown
+    if (this.cooldownRemaining > 0) {
+      this.showStatus(
+        `// Cooldown: ${this.cooldownRemaining}s remaining (kills reduce by 5s)`,
+        "#ff9800",
+      );
+      return;
+    }
+
+    // Start cooldown
+    this.startCooldown();
+
     // Hide terminal immediately
     this.hide();
 
@@ -256,7 +274,7 @@ export class ModEditor {
     } else if (result.type === "persistent") {
       // Continuous server effect
       // Determine target scope from result or default to player
-      const targetScope = result.targetScope || 'player';
+      const targetScope = result.targetScope || "player";
       const targetPlayerId = result.targetPlayerId || null;
       const targetPlayerName = result.targetPlayerName || this.playerName;
 
@@ -407,11 +425,72 @@ export class ModEditor {
     this.status.style.color = color;
   }
 
+  startCooldown() {
+    this.cooldownRemaining = this.cooldownSeconds;
+
+    // Clear any existing interval
+    if (this.cooldownInterval) {
+      clearInterval(this.cooldownInterval);
+    }
+
+    // Update cooldown every second
+    this.cooldownInterval = setInterval(() => {
+      this.cooldownRemaining--;
+
+      // Update status if terminal is open
+      if (this.visible) {
+        if (this.cooldownRemaining > 0) {
+          this.showStatus(
+            `// Cooldown: ${this.cooldownRemaining}s (kills reduce by 5s)`,
+            "#ff9800",
+          );
+        } else {
+          this.showStatus("// Ready", "#00ff00");
+        }
+      }
+
+      if (this.cooldownRemaining <= 0) {
+        clearInterval(this.cooldownInterval);
+        this.cooldownInterval = null;
+      }
+    }, 1000);
+  }
+
+  reduceKillCooldown() {
+    if (this.cooldownRemaining > 0) {
+      this.cooldownRemaining = Math.max(0, this.cooldownRemaining - 5);
+      console.log(
+        `⏱️ Mod cooldown reduced! ${this.cooldownRemaining}s remaining`,
+      );
+
+      // Update status if terminal is open
+      if (this.visible) {
+        if (this.cooldownRemaining > 0) {
+          this.showStatus(
+            `// Cooldown: ${this.cooldownRemaining}s (kills reduce by 5s)`,
+            "#ff9800",
+          );
+        } else {
+          this.showStatus("// Ready", "#00ff00");
+        }
+      }
+    }
+  }
+
   show() {
     this.container.style.display = "flex";
     this.visible = true;
     this.input.focus();
-    this.showStatus("// Ready", "#00ff00");
+
+    // Show current cooldown status or ready
+    if (this.cooldownRemaining > 0) {
+      this.showStatus(
+        `// Cooldown: ${this.cooldownRemaining}s (kills reduce by 5s)`,
+        "#ff9800",
+      );
+    } else {
+      this.showStatus("// Ready", "#00ff00");
+    }
   }
 
   hide() {
