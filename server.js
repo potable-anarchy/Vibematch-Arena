@@ -37,15 +37,40 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 // Handle termination signals gracefully
-process.on("SIGTERM", () => {
-  console.log("⚠️  SIGTERM received, attempting graceful shutdown...");
-  // Don't actually shutdown - keep alive
-});
+// Graceful shutdown handler
+async function gracefulShutdown(signal) {
+  console.log(`⚠️  ${signal} received, notifying players and shutting down...`);
 
-process.on("SIGINT", () => {
-  console.log("⚠️  SIGINT received, attempting graceful shutdown...");
-  // Don't actually shutdown - keep alive
-});
+  // Notify all connected players about the shutdown
+  io.emit("serverShutdown", {
+    message:
+      "Server is restarting for an update. You will automatically reconnect in a few seconds...",
+    countdown: 5,
+  });
+
+  // Give players time to receive the message
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // Stop accepting new connections
+  server.close(() => {
+    console.log("✅ HTTP server closed");
+  });
+
+  // Close all socket connections
+  io.close(() => {
+    console.log("✅ Socket.io server closed");
+    process.exit(0);
+  });
+
+  // Force exit after 10 seconds if graceful shutdown fails
+  setTimeout(() => {
+    console.error("❌ Forced shutdown after timeout");
+    process.exit(1);
+  }, 10000);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Log memory usage periodically
 setInterval(() => {

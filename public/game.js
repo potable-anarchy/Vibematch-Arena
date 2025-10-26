@@ -3,7 +3,14 @@ import { AssetLoader, PlayerAnimator } from "./assets.js";
 import { ModSystem } from "./modSystem.js";
 import { ModEditor } from "./modEditor.js";
 
-const socket = io();
+// Configure Socket.io with automatic reconnection
+const socket = io({
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  timeout: 20000,
+});
 const assets = new AssetLoader();
 
 // Player colors for differentiation
@@ -299,6 +306,9 @@ joinButton.addEventListener("click", async () => {
       });
     }
 
+    // Save player name for auto-rejoin on reconnect
+    localStorage.setItem("playerName", playerName);
+
     // Emit join event with generated name
     console.log(`📡 Emitting join event as "${playerName}"...`);
     socket.emit("join", playerName);
@@ -507,15 +517,96 @@ closeControlsButton.addEventListener("click", () => {
 // Socket connection events
 socket.on("connect", () => {
   console.log("✅ Socket connected:", socket.id);
+
+  // Clear any reconnection messages
+  const reconnectOverlay = document.getElementById("reconnectOverlay");
+  if (reconnectOverlay) {
+    reconnectOverlay.remove();
+  }
+
+  // If we were in game before disconnect, automatically rejoin
+  if (playerName && !menu.style.display.includes("none")) {
+    const savedName = localStorage.getItem("playerName");
+    if (savedName) {
+      // Auto-rejoin with saved name
+      setTimeout(() => {
+        const nameInput = document.getElementById("playerName");
+        if (nameInput) {
+          nameInput.value = savedName;
+          document.getElementById("joinButton")?.click();
+        }
+      }, 100);
+    }
+  }
 });
 
-socket.on("disconnect", () => {
-  console.log("❌ Socket disconnected");
+socket.on("disconnect", (reason) => {
+  console.log("❌ Socket disconnected:", reason);
+  showReconnectOverlay("Disconnected from server. Reconnecting...");
 });
 
 socket.on("connect_error", (error) => {
   console.error("❌ Socket connection error:", error);
+  showReconnectOverlay("Connection error. Retrying...");
 });
+
+socket.on("reconnect", (attemptNumber) => {
+  console.log("✅ Reconnected after", attemptNumber, "attempts");
+  hideReconnectOverlay();
+});
+
+socket.on("reconnect_attempt", (attemptNumber) => {
+  console.log("🔄 Reconnection attempt", attemptNumber);
+  showReconnectOverlay(`Reconnecting... (attempt ${attemptNumber}/10)`);
+});
+
+socket.on("reconnect_failed", () => {
+  console.error("❌ Reconnection failed");
+  showReconnectOverlay("Reconnection failed. Please refresh the page.", true);
+});
+
+// Server shutdown notification
+socket.on("serverShutdown", (data) => {
+  console.log("⚠️ Server shutting down:", data.message);
+  showReconnectOverlay(data.message);
+});
+
+// Helper function to show reconnection overlay
+function showReconnectOverlay(message, permanent = false) {
+  let overlay = document.getElementById("reconnectOverlay");
+
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "reconnectOverlay";
+    overlay.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 30px 50px;
+      border-radius: 10px;
+      font-size: 20px;
+      text-align: center;
+      z-index: 10000;
+      border: 2px solid #ff9800;
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  overlay.innerHTML = `
+    <div style="margin-bottom: 15px;">${message}</div>
+    ${!permanent ? '<div style="font-size: 14px; color: #aaa;">Please wait...</div>' : '<div style="font-size: 14px; color: #f44336;">Please refresh the page</div>'}
+  `;
+}
+
+function hideReconnectOverlay() {
+  const overlay = document.getElementById("reconnectOverlay");
+  if (overlay) {
+    overlay.remove();
+  }
+}
 
 // Socket events
 socket.on("playerCount", (count) => {
@@ -1331,7 +1422,7 @@ function drawPlayer(p) {
   }
 
   const animation = assets.getAnimation(animationKey);
-  const isLooping = animationKey.includes('shoot') ? false : true;
+  const isLooping = animationKey.includes("shoot") ? false : true;
   const sprite = animator.getFrame(animation, isLooping);
 
   ctx.save();
@@ -1362,7 +1453,7 @@ function drawPlayer(p) {
       const particleSize = 4;
 
       for (let i = 0; i < particleCount; i++) {
-        const angle = (Math.PI * 2 * i / particleCount) + rotationOffset;
+        const angle = (Math.PI * 2 * i) / particleCount + rotationOffset;
         const px = Math.cos(angle) * radius;
         const py = Math.sin(angle) * radius;
 
