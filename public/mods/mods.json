@@ -61,6 +61,12 @@
       "enabled": true
     },
     {
+      "name": "Performance HUD",
+      "file": "performance-hud.js",
+      "description": "Performance monitoring with FPS, memory leak detection, and network stats (Press F3 or toggle in menu)",
+      "enabled": true
+    },
+    {
       "name": "Debug HUD",
       "file": "debug-hud.js",
       "description": "Debug visualization for HUD Layout Manager",

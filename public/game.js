@@ -402,6 +402,8 @@ const saveNameButton = document.getElementById("saveNameButton");
 const spectateButton = document.getElementById("spectateButton");
 const controlsButton = document.getElementById("controlsButton");
 const closeControlsButton = document.getElementById("closeControlsButton");
+const debugHudButton = document.getElementById("debugHudButton");
+const debugHudButtonText = document.getElementById("debugHudButtonText");
 
 // Menu state
 let isMenuOpen = false;
@@ -510,6 +512,26 @@ controlsButton.addEventListener("click", () => {
 // Close controls button
 closeControlsButton.addEventListener("click", () => {
   closeControlsScreen();
+});
+
+// Debug HUD toggle button
+debugHudButton.addEventListener("click", () => {
+  if (window.togglePerformanceHUD) {
+    const isEnabled = window.togglePerformanceHUD();
+    debugHudButtonText.textContent = isEnabled ? "Disable Debug HUD" : "Enable Debug HUD";
+
+    // Show feedback
+    debugHudButton.style.background = isEnabled ? "#66ccff" : "";
+    setTimeout(() => {
+      debugHudButton.style.background = "";
+    }, 500);
+  } else {
+    console.error("Performance HUD mod not loaded!");
+    debugHudButtonText.textContent = "Error: Mod not loaded";
+    setTimeout(() => {
+      debugHudButtonText.textContent = "Enable Debug HUD";
+    }, 2000);
+  }
 });
 
 // Tab event listeners removed - no tabs needed
