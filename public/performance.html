@@ -317,14 +317,14 @@
                             margin: 0 10px;
                         "
                     ></div>
-                    <button class="time-btn active" data-range="1m">
+                    <button class="time-btn" data-range="1m">
                         1 Min
                     </button>
                     <button class="time-btn" data-range="5m">5 Min</button>
                     <button class="time-btn" data-range="1h">1 Hour</button>
                     <button class="time-btn" data-range="12h">12 Hours</button>
                     <button class="time-btn" data-range="24h">24 Hours</button>
-                    <button class="time-btn" data-range="48h">48 Hours</button>
+                    <button class="time-btn active" data-range="48h">48 Hours</button>
                     <button class="time-btn" data-range="custom">
                         Custom Range
                     </button>
@@ -575,6 +575,7 @@
                             radius: 0,
                         },
                     },
+                    spanGaps: false, // Don't span gaps - show breaks in data as gaps in the line
                 },
             };
 
@@ -937,11 +938,40 @@
                     formatBytes(metrics.network.bytesPerSecond),
                 );
 
-                // Update charts
+                // Update API endpoint table
+                const tbody = document.getElementById("endpoint-tbody");
+                tbody.innerHTML = "";
+
+                const endpoints = Object.entries(metrics.api.endpointStats);
+                if (endpoints.length === 0) {
+                    tbody.innerHTML =
+                        '<tr><td colspan="4" style="text-align: center; color: #666;">No API requests yet</td></tr>';
+                } else {
+                    endpoints.forEach(([endpoint, stats]) => {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                        <td>${endpoint}</td>
+                        <td>${stats.count}</td>
+                        <td>${stats.avgTime.toFixed(2)}</td>
+                        <td style="color: ${stats.errors > 0 ? "#F44336" : "#4CAF50"}">${stats.errors}</td>
+                    `;
+                        tbody.appendChild(row);
+                    });
+                }
+
+                // Only append new data to charts if:
+                // 1. Live updates are enabled
+                // 2. Not in custom range mode
+                // 3. Historical data has been loaded first
+                if (!isLiveMode || isCustomRange || !historicalDataLoaded) return;
+
                 const now = Date.now();
 
-                // Only append new data if live updates are enabled and not in custom range mode
-                if (!isLiveMode || isCustomRange) return;
+                // Check if this timestamp already exists (avoid duplicates)
+                if (tickChart.data.labels.length > 0 &&
+                    tickChart.data.labels[tickChart.data.labels.length - 1] >= now) {
+                    return; // Skip duplicate or out-of-order data
+                }
 
                 // Append new data to charts
                 tickChart.data.labels.push(now);
@@ -969,23 +999,13 @@
                 );
 
                 gameStatsChart.data.labels.push(now);
-                const damagePerSec = metrics.gameStats?.damagePerSecond || 0;
-                const projCount = metrics.gameState?.projectileCount || 0;
-                const deathsPerSec = metrics.gameStats?.deathsPerSecond || 0;
+                const damagePerSec = metrics.gameStats?.damagePerSecond ?? null;
+                const projCount = metrics.gameState?.projectileCount ?? null;
+                const deathsPerSec = metrics.gameStats?.deathsPerSecond ?? null;
 
                 gameStatsChart.data.datasets[0].data.push(damagePerSec);
                 gameStatsChart.data.datasets[1].data.push(projCount);
                 gameStatsChart.data.datasets[2].data.push(deathsPerSec);
-
-                // Debug logging for game stats
-                if (damagePerSec > 0 || projCount > 0 || deathsPerSec > 0) {
-                    console.log("Game stats update:", {
-                        damagePerSec,
-                        projCount,
-                        deathsPerSec,
-                        dataPoints: gameStatsChart.data.labels.length,
-                    });
-                }
 
                 // Filter out old data points based on time window
                 filterOldDataPoints();
@@ -996,27 +1016,6 @@
                 playerChart.update("active");
                 ticksChart.update("active");
                 gameStatsChart.update("active");
-
-                // Update API endpoint table
-                const tbody = document.getElementById("endpoint-tbody");
-                tbody.innerHTML = "";
-
-                const endpoints = Object.entries(metrics.api.endpointStats);
-                if (endpoints.length === 0) {
-                    tbody.innerHTML =
-                        '<tr><td colspan="4" style="text-align: center; color: #666;">No API requests yet</td></tr>';
-                } else {
-                    endpoints.forEach(([endpoint, stats]) => {
-                        const row = document.createElement("tr");
-                        row.innerHTML = `
-                        <td>${endpoint}</td>
-                        <td>${stats.count}</td>
-                        <td>${stats.avgTime.toFixed(2)}</td>
-                        <td style="color: ${stats.errors > 0 ? "#F44336" : "#4CAF50"}">${stats.errors}</td>
-                    `;
-                        tbody.appendChild(row);
-                    });
-                }
             }
 
             // WebSocket metrics handler
@@ -1029,12 +1028,13 @@
             });
 
             // Time Range Selection
-            let currentTimeRange = "1m"; // Default rolling window
+            let currentTimeRange = "48h"; // Default rolling window - 48 hours as requested
             let customStart = null;
             let customEnd = null;
             let isLiveMode = true; // Whether to receive live updates
             let historicalRefreshInterval = null;
             let isCustomRange = false;
+            let historicalDataLoaded = false; // Track if historical data has been loaded
 
             // Convert range string to milliseconds
             function rangeToMs(range) {
@@ -1172,6 +1172,7 @@
                     playerChart.update();
                     ticksChart.update();
                     gameStatsChart.update();
+                    historicalDataLoaded = true;
                     return;
                 }
 
@@ -1194,55 +1195,41 @@
                 gameStatsChart.data.datasets[2].data = [];
 
                 // Populate charts with historical data
-                // Store actual timestamps (in ms) as labels for filtering later
-                data.forEach((snapshot, index) => {
+                // Chart.js will automatically handle gaps when null values are in the data
+                data.forEach((snapshot) => {
                     const timestamp = snapshot.timestamp;
 
-                    // Tick time chart
+                    // Always add the timestamp
                     tickChart.data.labels.push(timestamp);
-                    tickChart.data.datasets[0].data.push(
-                        snapshot.avg_tick_time || 0,
-                    );
-
-                    // Memory chart
                     memoryChart.data.labels.push(timestamp);
-                    memoryChart.data.datasets[0].data.push(
-                        snapshot.memory_usage_mb || 0,
-                    );
-
-                    // Player chart
                     playerChart.data.labels.push(timestamp);
-                    playerChart.data.datasets[0].data.push(
-                        (snapshot.player_count || 0) +
-                            (snapshot.bot_count || 0),
-                    );
-
-                    // Ticks per second chart
                     ticksChart.data.labels.push(timestamp);
-                    ticksChart.data.datasets[0].data.push(
-                        snapshot.ticks_per_second || 0,
-                    );
-
-                    // Game stats chart
                     gameStatsChart.data.labels.push(timestamp);
+
+                    // Add data points - use null if data is missing/invalid
+                    tickChart.data.datasets[0].data.push(
+                        snapshot.avg_tick_time ?? null
+                    );
+                    memoryChart.data.datasets[0].data.push(
+                        snapshot.memory_usage_mb ?? null
+                    );
+                    playerChart.data.datasets[0].data.push(
+                        snapshot.player_count != null && snapshot.bot_count != null
+                            ? snapshot.player_count + snapshot.bot_count
+                            : null
+                    );
+                    ticksChart.data.datasets[0].data.push(
+                        snapshot.ticks_per_second ?? null
+                    );
                     gameStatsChart.data.datasets[0].data.push(
-                        snapshot.damage_per_second || 0,
+                        snapshot.damage_per_second ?? null
                     );
                     gameStatsChart.data.datasets[1].data.push(
-                        snapshot.projectile_count || 0,
+                        snapshot.projectile_count ?? null
                     );
                     gameStatsChart.data.datasets[2].data.push(
-                        snapshot.deaths_per_second || 0,
+                        snapshot.deaths_per_second ?? null
                     );
-
-                    // Debug: log first data point
-                    if (index === 0) {
-                        console.log("First game stats data point:", {
-                            damage_per_second: snapshot.damage_per_second,
-                            projectile_count: snapshot.projectile_count,
-                            deaths_per_second: snapshot.deaths_per_second,
-                        });
-                    }
                 });
 
                 // Update all charts with animation disabled for smooth transition
@@ -1252,7 +1239,10 @@
                 ticksChart.update('none');
                 gameStatsChart.update('none');
 
-                console.log("Charts updated with historical data, ready for live updates");
+                // Mark historical data as loaded so live updates can start appending
+                historicalDataLoaded = true;
+
+                console.log(`Charts updated with ${data.length} historical data points, ready for live updates`);
             }
 
             // Calculate aggregated metrics from historical data
@@ -1446,6 +1436,9 @@
                             historicalRefreshInterval = null;
                         }
 
+                        // Reset historical data loaded flag when changing ranges
+                        historicalDataLoaded = false;
+
                         // Show/hide custom range picker
                         const customPicker =
                             document.getElementById("customRangePicker");
@@ -1500,6 +1493,7 @@
                     // Custom range is static - stop auto-refresh
                     isLiveMode = false;
                     isCustomRange = true;
+                    historicalDataLoaded = false; // Reset flag for new custom range
                     if (historicalRefreshInterval) {
                         clearInterval(historicalRefreshInterval);
                         historicalRefreshInterval = null;
@@ -1515,31 +1509,10 @@
                     updateHistoricalData();
                 });
 
-            // Load initial historical data for the default time range (1m)
+            // Load initial historical data for the default time range (48h)
+            // This will populate the charts with historical data and set historicalDataLoaded = true
+            // After this completes, live WebSocket updates will begin appending new data
             updateHistoricalData();
-
-            // Fetch initial metrics immediately on page load to avoid delay
-            async function loadInitialMetrics() {
-                try {
-                    console.log("Fetching initial metrics...");
-                    const startTime = Date.now();
-                    const response = await fetch("/api/metrics");
-                    const metrics = await response.json();
-                    const loadTime = Date.now() - startTime;
-                    console.log(
-                        `Initial metrics loaded via HTTP in ${loadTime}ms`,
-                        metrics,
-                    );
-
-                    // Process the metrics immediately
-                    processMetricsUpdate(metrics);
-                } catch (error) {
-                    console.error("Failed to load initial metrics:", error);
-                }
-            }
-
-            // Call this immediately
-            loadInitialMetrics();
         </script>
     </body>
 </html>
