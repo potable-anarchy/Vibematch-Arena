@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import "dotenv/config";
+import { createClient } from "redis";
 import performanceMonitor from "./performance-monitor.js";
 import {
   saveMod,
@@ -19,6 +20,29 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// ====== REDIS SETUP FOR SHARED STATE ======
+
+const redisClient = createClient({
+  url: process.env.REDIS_URL || "redis://localhost:6379",
+  socket: {
+    reconnectStrategy: (retries) => {
+      if (retries > 10) {
+        console.error("❌ Redis reconnection failed after 10 attempts");
+        return new Error("Redis reconnection limit exceeded");
+      }
+      return Math.min(retries * 100, 3000); // Exponential backoff up to 3s
+    },
+  },
+});
+
+redisClient.on("error", (err) => console.error("❌ Redis Client Error:", err));
+redisClient.on("connect", () => console.log("✅ Redis connected"));
+redisClient.on("ready", () => console.log("✅ Redis ready"));
+redisClient.on("reconnecting", () => console.log("🔄 Redis reconnecting..."));
+
+// Connect to Redis
+await redisClient.connect();
 
 // ====== CRASH PREVENTION & ERROR HANDLING ======
 
@@ -48,19 +72,29 @@ async function gracefulShutdown(signal) {
     countdown: 5,
   });
 
+  // Final sync to Redis before shutdown
+  console.log("💾 Performing final state sync to Redis...");
+  await syncStateToRedis();
+  console.log("✅ Final state saved to Redis");
+
   // Give players time to receive the message
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Stop accepting new connections
-  server.close(() => {
+  httpServer.close(() => {
     console.log("✅ HTTP server closed");
   });
 
   // Close all socket connections
   io.close(() => {
     console.log("✅ Socket.io server closed");
-    process.exit(0);
   });
+
+  // Disconnect from Redis
+  await redisClient.quit();
+  console.log("✅ Redis disconnected");
+
+  process.exit(0);
 
   // Force exit after 10 seconds if graceful shutdown fails
   setTimeout(() => {
@@ -800,6 +834,104 @@ app.get("/api/mods", (req, res) => {
   }
 });
 
+// State migration endpoints for blue-green deployments
+app.get("/api/state/export", (req, res) => {
+  try {
+    console.log("📤 Exporting game state for migration...");
+
+    // Convert Maps to arrays for JSON serialization
+    const exportState = {
+      players: Array.from(gameState.players.entries()).map(([id, player]) => ({
+        id,
+        ...player,
+      })),
+      bots: Array.from(gameState.bots.entries()).map(([id, bot]) => ({
+        id,
+        ...bot,
+      })),
+      projectiles: gameState.projectiles,
+      pickups: gameState.pickups,
+      nextProjectileId: gameState.nextProjectileId,
+      nextPickupId: gameState.nextPickupId,
+      nextBotId: gameState.nextBotId,
+      warmupEndTime: gameState.warmupEndTime,
+      countdownStartTime: gameState.countdownStartTime,
+      roundActive: gameState.roundActive,
+      timestamp: Date.now(),
+    };
+
+    console.log(
+      `✅ Exported state: ${exportState.players.length} players, ${exportState.bots.length} bots, ${exportState.projectiles.length} projectiles`,
+    );
+    res.json(exportState);
+  } catch (error) {
+    console.error("❌ Error exporting state:", error);
+    res.status(500).json({ error: "Failed to export state" });
+  }
+});
+
+app.post("/api/state/import", express.json({ limit: "10mb" }), (req, res) => {
+  try {
+    const importedState = req.body;
+    console.log("📥 Importing game state from old container...");
+
+    if (!importedState || typeof importedState !== "object") {
+      throw new Error("Invalid state data");
+    }
+
+    // Clear current state
+    gameState.players.clear();
+    gameState.bots.clear();
+    gameState.projectiles = [];
+    gameState.pickups = [];
+
+    // Import players
+    if (Array.isArray(importedState.players)) {
+      importedState.players.forEach((player) => {
+        const { id, ...playerData } = player;
+        gameState.players.set(id, playerData);
+      });
+    }
+
+    // Import bots
+    if (Array.isArray(importedState.bots)) {
+      importedState.bots.forEach((bot) => {
+        const { id, ...botData } = bot;
+        gameState.bots.set(id, botData);
+      });
+    }
+
+    // Import other state
+    gameState.projectiles = importedState.projectiles || [];
+    gameState.pickups = importedState.pickups || [];
+    gameState.nextProjectileId = importedState.nextProjectileId || 0;
+    gameState.nextPickupId = importedState.nextPickupId || 0;
+    gameState.nextBotId = importedState.nextBotId || 0;
+    gameState.warmupEndTime = importedState.warmupEndTime;
+    gameState.countdownStartTime = importedState.countdownStartTime;
+    gameState.roundActive = importedState.roundActive || false;
+
+    console.log(
+      `✅ Imported state: ${gameState.players.size} players, ${gameState.bots.size} bots, ${gameState.projectiles.length} projectiles`,
+    );
+
+    res.json({
+      success: true,
+      imported: {
+        players: gameState.players.size,
+        bots: gameState.bots.size,
+        projectiles: gameState.projectiles.length,
+        pickups: gameState.pickups.length,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error importing state:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to import state", details: error.message });
+  }
+});
+
 // Game state
 const gameState = {
   players: new Map(),
@@ -814,6 +946,158 @@ const gameState = {
   countdownStartTime: null, // When 5 second countdown starts (null = not counting down)
   roundActive: false, // Is the round currently active (scoring enabled)
 };
+
+// ====== REDIS STATE MANAGEMENT ======
+
+const REDIS_KEYS = {
+  GAME_STATE: "vibematch:gamestate",
+  PLAYERS: "vibematch:players",
+  BOTS: "vibematch:bots",
+  METADATA: "vibematch:metadata",
+};
+
+// Sync game state to Redis (called every tick)
+async function syncStateToRedis() {
+  try {
+    // Only sync essential state - not projectiles/sounds (too volatile)
+    const state = {
+      players: Array.from(gameState.players.entries()).map(([id, p]) => ({
+        id,
+        name: p.name,
+        x: p.x,
+        y: p.y,
+        health: p.health,
+        armor: p.armor,
+        kills: p.kills,
+        deaths: p.deaths,
+        weapon: p.weapon,
+        ammo: p.ammo,
+        credits: p.credits,
+        activeMods: p.activeMods,
+      })),
+      bots: Array.from(gameState.bots.entries()).map(([id, b]) => ({
+        id,
+        name: b.name,
+        x: b.x,
+        y: b.y,
+        health: b.health,
+        armor: b.armor,
+        kills: b.kills,
+        deaths: b.deaths,
+        weapon: b.weapon,
+        ammo: b.ammo,
+        credits: b.credits,
+        activeMods: b.activeMods,
+      })),
+      metadata: {
+        nextProjectileId: gameState.nextProjectileId,
+        nextPickupId: gameState.nextPickupId,
+        nextBotId: gameState.nextBotId,
+        warmupEndTime: gameState.warmupEndTime,
+        countdownStartTime: gameState.countdownStartTime,
+        roundActive: gameState.roundActive,
+        timestamp: Date.now(),
+      },
+    };
+
+    // Use pipeline for atomic updates
+    const pipeline = redisClient.multi();
+    pipeline.set(REDIS_KEYS.PLAYERS, JSON.stringify(state.players));
+    pipeline.set(REDIS_KEYS.BOTS, JSON.stringify(state.bots));
+    pipeline.set(REDIS_KEYS.METADATA, JSON.stringify(state.metadata));
+    pipeline.expire(REDIS_KEYS.PLAYERS, 300); // 5 min TTL
+    pipeline.expire(REDIS_KEYS.BOTS, 300);
+    pipeline.expire(REDIS_KEYS.METADATA, 300);
+    await pipeline.exec();
+  } catch (error) {
+    console.error("❌ Error syncing state to Redis:", error.message);
+  }
+}
+
+// Restore game state from Redis on startup
+async function restoreStateFromRedis() {
+  try {
+    console.log("🔄 Attempting to restore game state from Redis...");
+
+    const [playersData, botsData, metadataData] = await Promise.all([
+      redisClient.get(REDIS_KEYS.PLAYERS),
+      redisClient.get(REDIS_KEYS.BOTS),
+      redisClient.get(REDIS_KEYS.METADATA),
+    ]);
+
+    if (!playersData && !botsData && !metadataData) {
+      console.log("ℹ️  No previous state found in Redis - starting fresh");
+      return false;
+    }
+
+    // Restore players
+    if (playersData) {
+      const players = JSON.parse(playersData);
+      players.forEach((p) => {
+        gameState.players.set(p.id, {
+          ...p,
+          socket: null, // Socket will reconnect
+          vx: 0,
+          vy: 0,
+          angle: 0,
+          isDead: false,
+          respawnTimer: null,
+          spawnInvulnUntil: null,
+          lastShotTime: 0,
+          inventory: [],
+          modExecutionContext: {},
+        });
+      });
+      console.log(`✅ Restored ${players.length} players from Redis`);
+    }
+
+    // Restore bots
+    if (botsData) {
+      const bots = JSON.parse(botsData);
+      bots.forEach((b) => {
+        gameState.bots.set(b.id, {
+          ...b,
+          vx: 0,
+          vy: 0,
+          angle: 0,
+          isDead: false,
+          respawnTimer: null,
+          spawnInvulnUntil: null,
+          lastShotTime: 0,
+          thinkTimer: 0,
+          target: null,
+          targetLastSeen: null,
+          state: "roaming",
+          coverPosition: null,
+          pickupTarget: null,
+          strategicWaypoint: null,
+          waypointReachedTime: 0,
+          modExecutionContext: {},
+        });
+      });
+      console.log(`✅ Restored ${bots.length} bots from Redis`);
+    }
+
+    // Restore metadata
+    if (metadataData) {
+      const metadata = JSON.parse(metadataData);
+      gameState.nextProjectileId = metadata.nextProjectileId || 0;
+      gameState.nextPickupId = metadata.nextPickupId || 0;
+      gameState.nextBotId = metadata.nextBotId || 0;
+      gameState.warmupEndTime = metadata.warmupEndTime;
+      gameState.countdownStartTime = metadata.countdownStartTime;
+      gameState.roundActive = metadata.roundActive || false;
+      console.log(
+        `✅ Restored game metadata from Redis (age: ${Date.now() - metadata.timestamp}ms)`,
+      );
+    }
+
+    return true;
+  } catch (error) {
+    console.error("❌ Error restoring state from Redis:", error);
+    return false;
+  }
+}
 
 // Game constants
 const GAME_CONFIG = {
@@ -3485,6 +3769,14 @@ function gameLoop() {
     });
     performanceMonitor.updateConnectionCount(io.engine.clientsCount);
 
+    // Sync state to Redis every second (60 ticks)
+    if (Math.floor(now / 1000) !== Math.floor((now - 16.67) / 1000)) {
+      // Non-blocking async call
+      syncStateToRedis().catch((err) =>
+        console.error("❌ Redis sync failed:", err.message),
+      );
+    }
+
     // Record tick time
     const tickEndTime = Date.now();
     const tickDuration = tickEndTime - tickStartTime;
@@ -3512,8 +3804,12 @@ setInterval(() => {
 
 setInterval(gameLoop, TICK_INTERVAL);
 
+// Restore state from Redis before starting server
+await restoreStateFromRedis();
+
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Open http://localhost:${PORT} in your browser`);
   console.log(`🤖 ${gameState.bots.size} bots ready`);
+  console.log(`👥 ${gameState.players.size} players restored from Redis`);
 });
