@@ -41,6 +41,9 @@ function getPlayerColor(playerId) {
 // Player animators - one per player
 const playerAnimators = new Map();
 
+// Track last shot time for each player to trigger shoot animation
+const playerLastShot = new Map();
+
 // Generate random player name
 function generatePlayerName() {
   const adjectives = [
@@ -594,6 +597,11 @@ socket.on("shoot", (data) => {
   createMuzzleFlash(gunEndX, gunEndY, data.angle);
   // Projectiles are now rendered from server state instead of instant tracers
   modSystem.callHook("onShoot", data);
+
+  // Track shoot time for animation (if playerId is in the data)
+  if (data.playerId) {
+    playerLastShot.set(data.playerId, Date.now());
+  }
 });
 
 socket.on("outOfAmmo", (data) => {
@@ -1294,9 +1302,22 @@ function drawPlayer(p) {
 
   // Determine animation state
   let animationKey;
+  const now = Date.now();
+  const lastShot = playerLastShot.get(p.id) || 0;
+  const shootAnimDuration = 3 * 50; // 3 frames * 50ms per frame = 150ms
+  const isShooting = now - lastShot < shootAnimDuration;
+
   if (p.reloading) {
     animationKey = `${weaponType}_reload`;
     animator.setFrameDelay(30); // Faster for more frames (15 frames total)
+  } else if (isShooting) {
+    animationKey = `${weaponType}_shoot`;
+    animator.setFrameDelay(50); // 3 frames, play once
+    // Reset animator if this is a new shot
+    if (now - lastShot < 16) {
+      // Within one frame of shooting
+      animator.reset();
+    }
   } else {
     // Check if player is moving
     const isMoving = p.vx !== 0 || p.vy !== 0;
@@ -1310,7 +1331,8 @@ function drawPlayer(p) {
   }
 
   const animation = assets.getAnimation(animationKey);
-  const sprite = animator.getFrame(animation);
+  const isLooping = animationKey.includes('shoot') ? false : true;
+  const sprite = animator.getFrame(animation, isLooping);
 
   ctx.save();
   ctx.translate(screenX, screenY);
