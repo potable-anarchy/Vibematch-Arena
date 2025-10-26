@@ -49,6 +49,18 @@
       "enabled": true
     },
     {
+      "name": "Credits HUD",
+      "file": "credits-hud.js",
+      "description": "Displays credits earned from kills - always enabled",
+      "enabled": true
+    },
+    {
+      "name": "Mod Shop",
+      "file": "mod-shop.js",
+      "description": "Press B to open the mod shop and purchase mods with credits",
+      "enabled": true
+    },
+    {
       "name": "Debug HUD",
       "file": "debug-hud.js",
       "description": "Debug visualization for HUD Layout Manager",
@@ -57,14 +69,14 @@
     {
       "name": "Better HUD v2",
       "file": "better-hud-v2.js",
-      "description": "Enhanced HUD with FPS counter, ammo warnings, and speed indicator",
-      "enabled": true
+      "description": "Enhanced HUD with FPS counter, ammo warnings, and speed indicator (10 credits in shop)",
+      "enabled": false
     },
     {
       "name": "Minimap v2",
       "file": "minimap-v2.js",
-      "description": "Tactical minimap showing players and pickups",
-      "enabled": true
+      "description": "Tactical minimap showing players and pickups (10 credits in shop)",
+      "enabled": false
     },
     {
       "name": "Kill Counter",
@@ -75,13 +87,13 @@
     {
       "name": "Rainbow Trail",
       "file": "example-rainbow-trail.js",
-      "description": "Adds a colorful particle trail behind your player",
+      "description": "Adds a colorful particle trail behind your player (10 credits in shop)",
       "enabled": false
     },
     {
       "name": "Damage Numbers",
       "file": "example-damage-numbers.js",
-      "description": "Shows floating damage numbers when you hit enemies",
+      "description": "Shows floating damage numbers when you hit enemies (10 credits in shop)",
       "enabled": false
     }
   ]

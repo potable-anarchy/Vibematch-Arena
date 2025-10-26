@@ -675,6 +675,33 @@ socket.on("roundStart", () => {
   hideCountdownMessage();
 });
 
+socket.on("modActivated", async (data) => {
+  console.log(`🤖 ${data.entityName} purchased ${data.modName}`);
+
+  // Show notification to all players
+  const notification = document.createElement("div");
+  notification.style.position = "fixed";
+  notification.style.top = "120px";
+  notification.style.right = "20px";
+  notification.style.backgroundColor = "rgba(102, 204, 255, 0.95)";
+  notification.style.border = "2px solid #66ccff";
+  notification.style.borderRadius = "8px";
+  notification.style.padding = "12px 20px";
+  notification.style.fontFamily = "monospace";
+  notification.style.fontSize = "14px";
+  notification.style.color = "#ffffff";
+  notification.style.zIndex = "9999";
+  notification.style.animation = "slideInRight 0.3s ease-out";
+  notification.textContent = `${data.entityName} purchased ${data.modName}`;
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.animation = "slideOutRight 0.3s ease-in";
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+});
+
 // Send input to server
 setInterval(() => {
   const player = gameState.players.find((p) => p.id === playerId);

@@ -870,6 +870,49 @@ const PICKUP_TYPES = {
   weapon_rifle: { weapon: "rifle", respawn: 25000 },
 };
 
+// Available mods for purchase (bots can buy these)
+const AVAILABLE_MODS = [
+  { id: "better-hud-v2", name: "Better HUD v2", file: "better-hud-v2.js", cost: 10 },
+  { id: "minimap-v2", name: "Minimap v2", file: "minimap-v2.js", cost: 10 },
+  { id: "damage-numbers", name: "Damage Numbers", file: "example-damage-numbers.js", cost: 10 },
+  { id: "rainbow-trail", name: "Rainbow Trail", file: "example-rainbow-trail.js", cost: 10 },
+];
+
+// Function to try to purchase a mod for a bot
+function tryPurchaseModForBot(bot) {
+  // Only purchase if bot has enough credits
+  if (bot.credits < 10) return false;
+
+  // Get mods the bot doesn't already have
+  const availableToPurchase = AVAILABLE_MODS.filter(
+    mod => !bot.activeMods.includes(mod.id)
+  );
+
+  if (availableToPurchase.length === 0) return false;
+
+  // Randomly select a mod (30% chance to purchase when checked)
+  if (Math.random() > 0.3) return false;
+
+  const selectedMod = availableToPurchase[Math.floor(Math.random() * availableToPurchase.length)];
+
+  // Purchase the mod
+  bot.credits -= selectedMod.cost;
+  bot.activeMods.push(selectedMod.id);
+
+  console.log(`🤖 Bot ${bot.name} purchased ${selectedMod.name} (${bot.credits} credits remaining)`);
+
+  // Broadcast the mod activation to all clients
+  io.emit("modActivated", {
+    entityId: bot.id,
+    entityName: bot.name,
+    modId: selectedMod.id,
+    modName: selectedMod.name,
+    modFile: selectedMod.file,
+  });
+
+  return true;
+}
+
 // Walls and obstacles (must match client-side walls-and-obstacles.js)
 const WALLS = [
   // Outer perimeter walls
@@ -1388,6 +1431,8 @@ function createBot() {
     maxAmmo: WEAPONS.pistol.mag,
     kills: 0,
     deaths: 0,
+    credits: 0,
+    activeMods: [],
     lastShot: 0,
     reloading: false,
     reloadFinish: 0,
@@ -1473,6 +1518,8 @@ function createPlayer(id, name) {
     maxAmmo: WEAPONS.pistol.mag,
     kills: 0,
     deaths: 0,
+    credits: 0,
+    activeMods: [],
     lastShot: 0,
     reloading: false,
     reloadFinish: 0,
@@ -1592,6 +1639,9 @@ function damagePlayer(player, damage, attackerId) {
         if (attacker) {
           attacker.kills++;
 
+          // Award credits for kill (base: 5 credits)
+          attacker.credits += 5;
+
           // Track kill for performance metrics
           performanceMonitor.recordKill();
 
@@ -1607,6 +1657,9 @@ function damagePlayer(player, damage, attackerId) {
           const botAttacker = gameState.bots.get(attackerId);
           if (botAttacker) {
             botAttacker.kills++;
+
+            // Award credits for kill (base: 5 credits)
+            botAttacker.credits += 5;
 
             // Track kill for performance metrics
             performanceMonitor.recordKill();
@@ -2554,6 +2607,9 @@ function gameLoop() {
       // Simple bot AI - think every 200ms
       if (now > bot.thinkTimer) {
         bot.thinkTimer = now + 200;
+
+        // Try to purchase a mod if bot has enough credits
+        tryPurchaseModForBot(bot);
 
         // LISTEN for sounds (gunshots and footsteps)
         let heardGunshot = null;
