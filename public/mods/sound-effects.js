@@ -10,6 +10,7 @@ class SoundManager {
     this.buffers = {};
     this.masterVolume = 0.3;
     this.ready = false;
+    this.activeSources = new Set(); // Track active sources for Safari
 
     // Resume audio context on first user interaction to avoid autoplay restrictions
     const resumeAudio = async () => {
@@ -56,6 +57,13 @@ class SoundManager {
     const soundData = this.buffers[name];
     if (!soundData) return;
 
+    // Safari-specific: Limit concurrent AudioNodes to prevent crashes
+    // Safari has a stricter limit (~32-64 active nodes) compared to Chrome
+    if (this.activeSources.size > 30) {
+      console.warn("Too many active audio sources, skipping sound:", name);
+      return;
+    }
+
     const source = this.context.createBufferSource();
     source.buffer = soundData.buffer;
 
@@ -66,14 +74,34 @@ class SoundManager {
     source.connect(gainNode);
     gainNode.connect(this.context.destination);
 
+    // Track this source
+    this.activeSources.add(source);
+
     // Clean up nodes after playback finishes to prevent memory leaks
     // This is critical for Safari which has stricter limits on active AudioNodes
-    source.onended = () => {
-      gainNode.disconnect();
-      source.disconnect();
+    const cleanup = () => {
+      this.activeSources.delete(source);
+      try {
+        gainNode.disconnect();
+        source.disconnect();
+      } catch (e) {
+        // Ignore errors if already disconnected
+      }
     };
 
-    source.start(0);
+    source.onended = cleanup;
+
+    // Failsafe: cleanup after maximum possible duration
+    // This ensures cleanup even if onended doesn't fire reliably
+    const maxDuration = soundData.buffer.duration * 1000 + 100; // ms with buffer
+    setTimeout(cleanup, maxDuration);
+
+    try {
+      source.start(0);
+    } catch (e) {
+      console.error("Failed to start audio source:", e);
+      cleanup(); // Clean up immediately on error
+    }
   }
 }
 
