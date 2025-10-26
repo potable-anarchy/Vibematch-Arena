@@ -14,6 +14,105 @@ const socket = io({
 });
 const assets = new AssetLoader();
 
+// ====== CLIENT VERSION TRACKING ======
+let clientVersion = null;
+
+// Check for version updates every 30 seconds
+setInterval(async () => {
+  if (!clientVersion) return; // Wait until we receive initial version
+
+  try {
+    const response = await fetch("/api/version");
+    const data = await response.json();
+
+    if (data.version !== clientVersion) {
+      console.log(
+        `🔄 New version available: ${data.version} (current: ${clientVersion})`,
+      );
+      showUpdateNotification(data.version);
+    }
+  } catch (err) {
+    console.error("Failed to check version:", err);
+  }
+}, 30000);
+
+function showUpdateNotification(newVersion) {
+  // Show non-intrusive update notification
+  let updateBanner = document.getElementById("updateBanner");
+
+  if (!updateBanner) {
+    updateBanner = document.createElement("div");
+    updateBanner.id = "updateBanner";
+    updateBanner.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 15px;
+      text-align: center;
+      z-index: 100000;
+      font-size: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      animation: slideDown 0.3s ease-out;
+    `;
+
+    updateBanner.innerHTML = `
+      <strong>🎮 New Update Available!</strong>
+      <span style="margin: 0 10px;">The game has been updated with new features and fixes.</span>
+      <button id="updateNowBtn" style="
+        background: white;
+        color: #667eea;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 5px;
+        font-weight: bold;
+        cursor: pointer;
+        margin: 0 5px;
+      ">Update Now</button>
+      <button id="updateLaterBtn" style="
+        background: rgba(255,255,255,0.2);
+        color: white;
+        border: 1px solid white;
+        padding: 8px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 0 5px;
+      ">Later</button>
+    `;
+
+    document.body.appendChild(updateBanner);
+
+    document.getElementById("updateNowBtn").addEventListener("click", () => {
+      console.log("🔄 Reloading page for update...");
+      window.location.reload(true); // Hard reload to bypass cache
+    });
+
+    document.getElementById("updateLaterBtn").addEventListener("click", () => {
+      updateBanner.remove();
+      // Show again in 2 minutes if they dismiss
+      setTimeout(() => showUpdateNotification(newVersion), 120000);
+    });
+  }
+}
+
+// Add CSS animation
+const style = document.createElement("style");
+style.textContent = `
+  @keyframes slideDown {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+`;
+document.head.appendChild(style);
+
 // Player colors for differentiation
 const PLAYER_COLORS = [
   { name: "blue", r: 100, g: 149, b: 237 }, // Cornflower blue
@@ -247,7 +346,12 @@ let gameState = {
 };
 
 // Interpolation for smooth movement
-let lastServerState = { players: [], pickups: [], projectiles: [], grenades: [] };
+let lastServerState = {
+  players: [],
+  pickups: [],
+  projectiles: [],
+  grenades: [],
+};
 let serverStateTime = Date.now();
 const INTERPOLATION_TIME = 100; // ms - how long to interpolate
 
@@ -387,7 +491,10 @@ document.addEventListener("keyup", (e) => {
       if (input.throwGrenade) {
         // Calculate final power based on hold duration
         const holdDuration = Date.now() - grenadeChargeStartTime;
-        grenadePower = Math.min(MAX_GRENADE_POWER, holdDuration / GRENADE_CHARGE_TIME);
+        grenadePower = Math.min(
+          MAX_GRENADE_POWER,
+          holdDuration / GRENADE_CHARGE_TIME,
+        );
         input.throwGrenade = false;
         // Power will be sent with the input to server
       }
@@ -548,7 +655,9 @@ closeControlsButton.addEventListener("click", () => {
 debugHudButton.addEventListener("click", () => {
   if (window.togglePerformanceHUD) {
     const isEnabled = window.togglePerformanceHUD();
-    debugHudButtonText.textContent = isEnabled ? "Disable Debug HUD" : "Enable Debug HUD";
+    debugHudButtonText.textContent = isEnabled
+      ? "Disable Debug HUD"
+      : "Enable Debug HUD";
 
     // Show feedback
     debugHudButton.style.background = isEnabled ? "#66ccff" : "";
@@ -628,6 +737,12 @@ socket.on("connect", () => {
       }, 100);
     }
   }
+});
+
+// Receive client version from server
+socket.on("clientVersion", (data) => {
+  console.log("🔖 Client version:", data.version);
+  clientVersion = data.version;
 });
 
 socket.on("disconnect", (reason) => {
@@ -932,13 +1047,13 @@ socket.on("modActivated", async (data) => {
 
 // Game mode voting handlers
 socket.on("voteUpdate", (data) => {
-  const {votes, totalPlayers} = data;
-  voteCountsDisplay.textContent = `Votes: Deathmatch (${votes.deathmatch}) | Vibe Royale (${votes['vibe-royale']})`;
+  const { votes, totalPlayers } = data;
+  voteCountsDisplay.textContent = `Votes: Deathmatch (${votes.deathmatch}) | Vibe Royale (${votes["vibe-royale"]})`;
 });
 
 socket.on("gameModeChanged", (data) => {
-  const {gameMode} = data;
-  const displayName = gameMode === 'vibe-royale' ? 'Vibe Royale' : 'Deathmatch';
+  const { gameMode } = data;
+  const displayName = gameMode === "vibe-royale" ? "Vibe Royale" : "Deathmatch";
   gameModeDisplay.textContent = `Current: ${displayName}`;
 
   // Show notification
@@ -981,7 +1096,10 @@ setInterval(() => {
   // Update grenade power if charging
   if (input.throwGrenade) {
     const holdDuration = Date.now() - grenadeChargeStartTime;
-    grenadePower = Math.min(MAX_GRENADE_POWER, holdDuration / GRENADE_CHARGE_TIME);
+    grenadePower = Math.min(
+      MAX_GRENADE_POWER,
+      holdDuration / GRENADE_CHARGE_TIME,
+    );
   }
 
   // Send input with grenade power
@@ -1397,7 +1515,8 @@ function createExplosionEffect(x, y, radius) {
   // Create explosion particles in all directions
   const particleCount = 60;
   for (let i = 0; i < particleCount; i++) {
-    const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.2;
+    const angle =
+      (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.2;
     const speed = 200 + Math.random() * 300;
     particles.push({
       x,
@@ -1406,7 +1525,7 @@ function createExplosionEffect(x, y, radius) {
       vy: Math.sin(angle) * speed,
       life: 0.6 + Math.random() * 0.4,
       maxLife: 1.0,
-      color: i % 3 === 0 ? "#ff6600" : (i % 3 === 1 ? "#ffaa00" : "#ff0000"),
+      color: i % 3 === 0 ? "#ff6600" : i % 3 === 1 ? "#ffaa00" : "#ff0000",
       size: 3 + Math.random() * 4,
     });
   }
@@ -1441,8 +1560,10 @@ function render(dt) {
     let topScorer = null;
 
     // In Vibe Royale mode, follow the kill leader
-    if (gameState.gameMode === 'vibe-royale' && gameState.killLeaderId) {
-      topScorer = renderState.players.find(p => p.id === gameState.killLeaderId && p.health > 0);
+    if (gameState.gameMode === "vibe-royale" && gameState.killLeaderId) {
+      topScorer = renderState.players.find(
+        (p) => p.id === gameState.killLeaderId && p.health > 0,
+      );
     }
 
     // Fallback: find top scoring alive player or bot
@@ -1772,11 +1893,21 @@ function drawPlayer(p) {
     ctx.fillRect(powerBarX, powerBarY, powerBarWidth, powerBarHeight);
 
     // Power fill (yellow gradient)
-    const gradient = ctx.createLinearGradient(powerBarX, 0, powerBarX + powerBarWidth, 0);
+    const gradient = ctx.createLinearGradient(
+      powerBarX,
+      0,
+      powerBarX + powerBarWidth,
+      0,
+    );
     gradient.addColorStop(0, "#ffff00");
     gradient.addColorStop(1, "#ff9900");
     ctx.fillStyle = gradient;
-    ctx.fillRect(powerBarX, powerBarY, powerBarWidth * grenadePower, powerBarHeight);
+    ctx.fillRect(
+      powerBarX,
+      powerBarY,
+      powerBarWidth * grenadePower,
+      powerBarHeight,
+    );
 
     // Border
     ctx.strokeStyle = "#ffffff";
@@ -2040,7 +2171,7 @@ function drawGrenades() {
     } else if (fusePercent > 0.33) {
       // Orange (66% to 33% remaining)
       r = 255;
-      g = Math.floor(165 + (90 * (fusePercent - 0.33) / 0.33));
+      g = Math.floor(165 + (90 * (fusePercent - 0.33)) / 0.33);
       b = 0;
     } else {
       // Red (33% to 0% remaining)
@@ -2080,7 +2211,11 @@ function drawGrenades() {
       ctx.font = "bold 10px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(Math.ceil(timeRemaining / 1000).toString(), screenX, screenY + size + 2);
+      ctx.fillText(
+        Math.ceil(timeRemaining / 1000).toString(),
+        screenX,
+        screenY + size + 2,
+      );
       ctx.restore();
     }
   });

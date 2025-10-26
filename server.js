@@ -123,6 +123,33 @@ setInterval(() => {
 
 console.log("✅ Crash prevention and error handlers installed");
 
+// ====== CLIENT VERSION TRACKING FOR LIVE UPDATES ======
+import crypto from "crypto";
+
+// Generate client version hash from critical client files
+async function generateClientVersion() {
+  const hash = crypto.createHash("md5");
+  const files = [
+    join(__dirname, "public/index.html"),
+    join(__dirname, "public/game.js"),
+    join(__dirname, "public/style.css"),
+  ];
+
+  for (const file of files) {
+    try {
+      const content = await fs.readFile(file);
+      hash.update(content);
+    } catch (err) {
+      console.error(`Failed to read ${file}:`, err.message);
+    }
+  }
+
+  return hash.digest("hex").substring(0, 12);
+}
+
+let CLIENT_VERSION = await generateClientVersion();
+console.log(`🔖 Client version: ${CLIENT_VERSION}`);
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -143,6 +170,11 @@ app.get("/health", (req, res) => {
   performanceMonitor.startRequest(requestId, "/health");
   res.status(200).json({ status: "healthy", bots: gameState.bots.size });
   performanceMonitor.endRequest(requestId);
+});
+
+// Client version endpoint for cache busting
+app.get("/api/version", (req, res) => {
+  res.json({ version: CLIENT_VERSION });
 });
 
 // Performance metrics API endpoints (for admin dashboard)
@@ -1070,7 +1102,7 @@ const gameState = {
   warmupEndTime: null, // When warmup ends (null = not in warmup)
   countdownStartTime: null, // When 5 second countdown starts (null = not counting down)
   roundActive: false, // Is the round currently active (scoring enabled)
-  gameMode: 'deathmatch', // Current game mode: 'deathmatch' or 'vibe-royale'
+  gameMode: "deathmatch", // Current game mode: 'deathmatch' or 'vibe-royale'
   votes: new Map(), // Player votes for game mode: playerId -> gameMode
   killLeaderId: null, // ID of player with most kills (for spectator camera in Vibe Royale)
 };
@@ -1294,7 +1326,7 @@ const WEAPONS = {
     minEngageRange: 50,
     maxEngageRange: 400,
   },
-  'dual-pistols': {
+  "dual-pistols": {
     damage: 20,
     rof: 12, // double rate of fire
     mag: 24, // double ammo
@@ -2120,18 +2152,20 @@ function spawnWeaponPickup(x, y, weaponType) {
     respawnAt: null, // Dropped weapons don't respawn in Vibe Royale
   };
   gameState.pickups.push(pickup);
-  io.emit('pickupSpawned', pickup);
+  io.emit("pickupSpawned", pickup);
 }
 
 // Switch game mode
 function switchGameMode(newMode) {
-  console.log(`🎮 Switching game mode from ${gameState.gameMode} to ${newMode}`);
+  console.log(
+    `🎮 Switching game mode from ${gameState.gameMode} to ${newMode}`,
+  );
 
   gameState.gameMode = newMode;
   gameState.votes.clear(); // Clear all votes
 
   // Notify all clients
-  io.emit('gameModeChanged', { gameMode: newMode });
+  io.emit("gameModeChanged", { gameMode: newMode });
 
   // Reset the round to apply new rules
   // Reset all player scores
@@ -2207,8 +2241,13 @@ function damagePlayer(player, damage, attackerId) {
       performanceMonitor.recordDeath();
 
       // In Vibe Royale mode, drop the player's weapon
-      if (gameState.gameMode === 'vibe-royale' && player.weapon && player.weapon !== 'pistol') {
-        const weaponToDrop = player.weapon === 'dual-pistols' ? 'pistol' : player.weapon;
+      if (
+        gameState.gameMode === "vibe-royale" &&
+        player.weapon &&
+        player.weapon !== "pistol"
+      ) {
+        const weaponToDrop =
+          player.weapon === "dual-pistols" ? "pistol" : player.weapon;
         spawnWeaponPickup(player.x, player.y, weaponToDrop);
       }
 
@@ -2219,7 +2258,7 @@ function damagePlayer(player, damage, attackerId) {
           attacker.kills++;
 
           // Award credits for kill (10 in Vibe Royale, 5 in deathmatch)
-          const creditsPerKill = gameState.gameMode === 'vibe-royale' ? 10 : 5;
+          const creditsPerKill = gameState.gameMode === "vibe-royale" ? 10 : 5;
           attacker.credits += creditsPerKill;
 
           // Track kill for performance metrics
@@ -2229,7 +2268,10 @@ function damagePlayer(player, damage, attackerId) {
           updateKillLeader();
 
           // Check if attacker reached score limit (only in deathmatch)
-          if (gameState.gameMode === 'deathmatch' && attacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+          if (
+            gameState.gameMode === "deathmatch" &&
+            attacker.kills >= GAME_CONFIG.SCORE_LIMIT
+          ) {
             // Reset round after a short delay (3 seconds)
             setTimeout(() => {
               resetRound(attacker.id, attacker.name);
@@ -2242,7 +2284,8 @@ function damagePlayer(player, damage, attackerId) {
             botAttacker.kills++;
 
             // Award credits for kill (10 in Vibe Royale, 5 in deathmatch)
-            const creditsPerKill = gameState.gameMode === 'vibe-royale' ? 10 : 5;
+            const creditsPerKill =
+              gameState.gameMode === "vibe-royale" ? 10 : 5;
             botAttacker.credits += creditsPerKill;
 
             // Track kill for performance metrics
@@ -2252,7 +2295,10 @@ function damagePlayer(player, damage, attackerId) {
             updateKillLeader();
 
             // Check if bot reached score limit (only in deathmatch)
-            if (gameState.gameMode === 'deathmatch' && botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+            if (
+              gameState.gameMode === "deathmatch" &&
+              botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT
+            ) {
               // Reset round after a short delay (3 seconds)
               setTimeout(() => {
                 resetRound(botAttacker.id, botAttacker.name);
@@ -2263,7 +2309,7 @@ function damagePlayer(player, damage, attackerId) {
       }
     }
     // In Vibe Royale mode, no respawns
-    if (gameState.gameMode === 'vibe-royale') {
+    if (gameState.gameMode === "vibe-royale") {
       player.respawnAt = null; // Never respawn
     } else {
       player.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
@@ -2423,6 +2469,9 @@ setInterval(() => {
 // Socket.io connection handling
 io.on("connection", (socket) => {
   console.log("Player connected:", socket.id);
+
+  // Send client version immediately on connection
+  socket.emit("clientVersion", { version: CLIENT_VERSION });
 
   socket.on("join", (playerName) => {
     try {
@@ -2739,7 +2788,15 @@ io.on("connection", (socket) => {
   // Activate persistent mod that runs every game tick
   socket.on("activatePersistentMod", (data) => {
     try {
-      const { code, durationMs, name, description, targetScope, targetPlayerId, targetPlayerName } = data;
+      const {
+        code,
+        durationMs,
+        name,
+        description,
+        targetScope,
+        targetPlayerId,
+        targetPlayerName,
+      } = data;
       const playerId = socket.id;
       const player = gameState.players.get(playerId);
       const isSpectator = !player;
@@ -2752,7 +2809,7 @@ io.on("connection", (socket) => {
       const activatorName = isSpectator ? socket.id : player.name;
 
       // Determine target scope
-      const scope = targetScope || 'player';
+      const scope = targetScope || "player";
       const targetId = targetPlayerId || playerId;
       const targetName = targetPlayerName || activatorName;
 
@@ -2812,7 +2869,7 @@ io.on("connection", (socket) => {
     if (!player) return; // Only players can vote, not spectators
 
     // Validate game mode
-    if (gameMode !== 'deathmatch' && gameMode !== 'vibe-royale') {
+    if (gameMode !== "deathmatch" && gameMode !== "vibe-royale") {
       return;
     }
 
@@ -2820,7 +2877,7 @@ io.on("connection", (socket) => {
     gameState.votes.set(playerId, gameMode);
 
     // Count votes
-    const voteCounts = { deathmatch: 0, 'vibe-royale': 0 };
+    const voteCounts = { deathmatch: 0, "vibe-royale": 0 };
     for (const [id, mode] of gameState.votes) {
       if (gameState.players.has(id)) {
         voteCounts[mode]++;
@@ -2834,13 +2891,19 @@ io.on("connection", (socket) => {
     });
 
     // If majority votes for a different mode, switch modes
-    const totalVotes = voteCounts.deathmatch + voteCounts['vibe-royale'];
+    const totalVotes = voteCounts.deathmatch + voteCounts["vibe-royale"];
     const currentMode = gameState.gameMode;
 
-    if (voteCounts['vibe-royale'] > gameState.players.size / 2 && currentMode !== 'vibe-royale') {
-      switchGameMode('vibe-royale');
-    } else if (voteCounts.deathmatch > gameState.players.size / 2 && currentMode !== 'deathmatch') {
-      switchGameMode('deathmatch');
+    if (
+      voteCounts["vibe-royale"] > gameState.players.size / 2 &&
+      currentMode !== "vibe-royale"
+    ) {
+      switchGameMode("vibe-royale");
+    } else if (
+      voteCounts.deathmatch > gameState.players.size / 2 &&
+      currentMode !== "deathmatch"
+    ) {
+      switchGameMode("deathmatch");
     }
   });
 });
@@ -2957,7 +3020,8 @@ function throwGrenade(player, power) {
   player.grenades--;
 
   // Calculate velocity based on power (0 to 1)
-  const velocity = GRENADE_CONFIG.BASE_VELOCITY +
+  const velocity =
+    GRENADE_CONFIG.BASE_VELOCITY +
     (GRENADE_CONFIG.MAX_VELOCITY - GRENADE_CONFIG.BASE_VELOCITY) * power;
 
   const grenade = {
@@ -2975,7 +3039,9 @@ function throwGrenade(player, power) {
 
   gameState.grenades.push(grenade);
 
-  console.log(`💣 ${player.name} threw grenade with power ${Math.round(power * 100)}%`);
+  console.log(
+    `💣 ${player.name} threw grenade with power ${Math.round(power * 100)}%`,
+  );
 
   io.emit("grenadeThrown", {
     id: grenade.id,
@@ -3003,8 +3069,9 @@ function detonateGrenade(grenade) {
 
     if (distance <= GRENADE_CONFIG.BLAST_RADIUS) {
       // Calculate damage based on distance (inverse linear falloff)
-      const damagePercent = 1 - (distance / GRENADE_CONFIG.BLAST_RADIUS);
-      const damage = GRENADE_CONFIG.MIN_DAMAGE +
+      const damagePercent = 1 - distance / GRENADE_CONFIG.BLAST_RADIUS;
+      const damage =
+        GRENADE_CONFIG.MIN_DAMAGE +
         (GRENADE_CONFIG.MAX_DAMAGE - GRENADE_CONFIG.MIN_DAMAGE) * damagePercent;
 
       // Apply damage (armor absorbs first)
@@ -3028,7 +3095,8 @@ function detonateGrenade(grenade) {
         player.deaths++;
         player.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
 
-        const thrower = gameState.players.get(grenade.throwerId) ||
+        const thrower =
+          gameState.players.get(grenade.throwerId) ||
           gameState.bots.get(grenade.throwerId);
 
         if (thrower && grenade.throwerId !== player.id) {
@@ -3063,8 +3131,9 @@ function detonateGrenade(grenade) {
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance <= GRENADE_CONFIG.BLAST_RADIUS) {
-      const damagePercent = 1 - (distance / GRENADE_CONFIG.BLAST_RADIUS);
-      const damage = GRENADE_CONFIG.MIN_DAMAGE +
+      const damagePercent = 1 - distance / GRENADE_CONFIG.BLAST_RADIUS;
+      const damage =
+        GRENADE_CONFIG.MIN_DAMAGE +
         (GRENADE_CONFIG.MAX_DAMAGE - GRENADE_CONFIG.MIN_DAMAGE) * damagePercent;
 
       let actualDamage = damage;
@@ -3086,7 +3155,8 @@ function detonateGrenade(grenade) {
         bot.deaths++;
         bot.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
 
-        const thrower = gameState.players.get(grenade.throwerId) ||
+        const thrower =
+          gameState.players.get(grenade.throwerId) ||
           gameState.bots.get(grenade.throwerId);
 
         if (thrower && grenade.throwerId !== bot.id) {
@@ -3808,7 +3878,12 @@ function gameLoop() {
               // 2. Bot has line of sight
               // 3. Random chance (20% per think cycle)
               const grenadeRange = nearestDist >= 150 && nearestDist <= 400;
-              const hasLOS = hasLineOfSight(bot.x, bot.y, nearestTarget.x, nearestTarget.y);
+              const hasLOS = hasLineOfSight(
+                bot.x,
+                bot.y,
+                nearestTarget.x,
+                nearestTarget.y,
+              );
 
               if (grenadeRange && hasLOS && Math.random() < 0.2) {
                 // Calculate power based on distance (closer = less power)
@@ -4168,13 +4243,16 @@ function gameLoop() {
             const newWeapon = config.weapon;
 
             // Special case: picking up pistol while holding pistol = dual pistols
-            if (newWeapon === 'pistol' && bot.weapon === 'pistol') {
-              bot.weapon = 'dual-pistols';
-              bot.ammo = WEAPONS['dual-pistols'].mag;
-              bot.maxAmmo = WEAPONS['dual-pistols'].mag;
+            if (newWeapon === "pistol" && bot.weapon === "pistol") {
+              bot.weapon = "dual-pistols";
+              bot.ammo = WEAPONS["dual-pistols"].mag;
+              bot.maxAmmo = WEAPONS["dual-pistols"].mag;
               bot.reloading = false;
               collected = true;
-            } else if (newWeapon === 'pistol' && bot.weapon === 'dual-pistols') {
+            } else if (
+              newWeapon === "pistol" &&
+              bot.weapon === "dual-pistols"
+            ) {
               // Already have dual pistols, don't downgrade
               collected = false;
             } else if (bot.weapon !== newWeapon) {
@@ -4332,13 +4410,16 @@ function gameLoop() {
             const newWeapon = config.weapon;
 
             // Special case: picking up pistol while holding pistol = dual pistols
-            if (newWeapon === 'pistol' && player.weapon === 'pistol') {
-              player.weapon = 'dual-pistols';
-              player.ammo = WEAPONS['dual-pistols'].mag;
-              player.maxAmmo = WEAPONS['dual-pistols'].mag;
+            if (newWeapon === "pistol" && player.weapon === "pistol") {
+              player.weapon = "dual-pistols";
+              player.ammo = WEAPONS["dual-pistols"].mag;
+              player.maxAmmo = WEAPONS["dual-pistols"].mag;
               player.reloading = false;
               collected = true;
-            } else if (newWeapon === 'pistol' && player.weapon === 'dual-pistols') {
+            } else if (
+              newWeapon === "pistol" &&
+              player.weapon === "dual-pistols"
+            ) {
               // Already have dual pistols, don't downgrade
               collected = false;
             } else if (player.weapon !== newWeapon) {
@@ -4377,16 +4458,18 @@ function gameLoop() {
       const activeMods = getActiveMods();
       const modsForBroadcast = activeMods.map((mod) => {
         // Get player name who activated the mod
-        const activator = gameState.players.get(mod.player_id) || gameState.bots.get(mod.player_id);
-        const activatorName = activator ? activator.name : 'Unknown';
+        const activator =
+          gameState.players.get(mod.player_id) ||
+          gameState.bots.get(mod.player_id);
+        const activatorName = activator ? activator.name : "Unknown";
 
         return {
           id: mod.id,
-          name: mod.name || mod.description || 'Unknown Mod',
+          name: mod.name || mod.description || "Unknown Mod",
           description: mod.description,
           activatorId: mod.player_id,
           activatorName: activatorName,
-          targetScope: mod.target_scope || 'player',
+          targetScope: mod.target_scope || "player",
           targetPlayerId: mod.target_player_id,
           targetPlayerName: mod.target_player_name,
           expiresAt: mod.expires_at,
