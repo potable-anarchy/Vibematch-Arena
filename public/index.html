@@ -100,6 +100,12 @@
                             Monitors FPS, memory leaks, and performance
                         </div>
                     </div>
+
+                    <div class="game-menu-section">
+                        <button id="levelEditorButton" class="menu-btn">
+                            Level Editor
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -187,6 +193,115 @@
                     <button id="closeControlsButton" class="menu-btn back-btn">
                         Back to Menu
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Level Editor -->
+        <div id="levelEditor" class="level-editor" style="display: none">
+            <div class="level-editor-header">
+                <h2>LEVEL EDITOR</h2>
+                <div class="level-editor-tools">
+                    <input
+                        type="text"
+                        id="levelNameInput"
+                        placeholder="Level Name"
+                        maxlength="30"
+                    />
+                    <button id="saveLevelButton" class="editor-btn">
+                        Save Level
+                    </button>
+                    <button id="loadLevelButton" class="editor-btn">
+                        Load Level
+                    </button>
+                    <button id="newLevelButton" class="editor-btn">
+                        New Level
+                    </button>
+                    <button id="exitEditorButton" class="editor-btn exit-btn">
+                        Exit Editor
+                    </button>
+                </div>
+            </div>
+
+            <div class="level-editor-main">
+                <div class="level-editor-sidebar">
+                    <h3>Tools</h3>
+                    <div class="tool-section">
+                        <h4>Mode</h4>
+                        <button id="toolWall" class="tool-btn active" data-tool="wall">
+                            Wall
+                        </button>
+                        <button id="toolCrate" class="tool-btn" data-tool="crate">
+                            Crate
+                        </button>
+                        <button id="toolSpawn" class="tool-btn" data-tool="spawn">
+                            Spawn Point
+                        </button>
+                        <button id="toolPickup" class="tool-btn" data-tool="pickup">
+                            Pickup
+                        </button>
+                        <button id="toolWaypoint" class="tool-btn" data-tool="waypoint">
+                            Waypoint
+                        </button>
+                        <button id="toolDelete" class="tool-btn" data-tool="delete">
+                            Delete
+                        </button>
+                    </div>
+
+                    <div class="tool-section">
+                        <h4>Pickup Type</h4>
+                        <select id="pickupTypeSelect">
+                            <option value="health_small">Health (Small)</option>
+                            <option value="health_big">Health (Big)</option>
+                            <option value="armor_light">Armor (Light)</option>
+                            <option value="armor_heavy">Armor (Heavy)</option>
+                            <option value="ammo">Ammo</option>
+                            <option value="weapon_smg">SMG</option>
+                            <option value="weapon_shotgun">Shotgun</option>
+                            <option value="weapon_rifle">Rifle</option>
+                        </select>
+                    </div>
+
+                    <div class="tool-section">
+                        <h4>Map Settings</h4>
+                        <label>
+                            Width:
+                            <input
+                                type="number"
+                                id="mapWidthInput"
+                                value="2000"
+                                min="1000"
+                                max="5000"
+                                step="100"
+                            />
+                        </label>
+                        <label>
+                            Height:
+                            <input
+                                type="number"
+                                id="mapHeightInput"
+                                value="2000"
+                                min="1000"
+                                max="5000"
+                                step="100"
+                            />
+                        </label>
+                    </div>
+
+                    <div class="tool-section">
+                        <h4>Saved Levels</h4>
+                        <div id="savedLevelsList" class="saved-levels-list">
+                            Loading...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="level-editor-canvas-container">
+                    <canvas id="editorCanvas"></canvas>
+                    <div class="editor-help">
+                        <p>Click and drag to create walls | Click to place objects | Right-click to delete</p>
+                        <p>Camera: Arrow keys or WASD | Zoom: Mouse wheel</p>
+                    </div>
                 </div>
             </div>
         </div>

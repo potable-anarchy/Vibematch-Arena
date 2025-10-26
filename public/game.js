@@ -2,6 +2,7 @@
 import { AssetLoader, PlayerAnimator } from "./assets.js";
 import { ModSystem } from "./modSystem.js";
 import { ModEditor } from "./modEditor.js";
+import { LevelEditor } from "./levelEditor.js";
 
 // Configure Socket.io with automatic reconnection
 const socket = io({
@@ -124,6 +125,10 @@ const modSystem = new ModSystem({
 const modEditor = new ModEditor(modSystem);
 modEditor.setSocket(socket); // Connect socket for server mods
 modEditor.setPlayerName(playerName); // Set initial player name
+
+// Level Editor
+const levelEditor = new LevelEditor();
+window.levelEditor = levelEditor; // Expose for saved levels list onclick
 
 // Auto-load enabled mods from manifest
 async function autoLoadMods() {
@@ -404,6 +409,7 @@ const controlsButton = document.getElementById("controlsButton");
 const closeControlsButton = document.getElementById("closeControlsButton");
 const debugHudButton = document.getElementById("debugHudButton");
 const debugHudButtonText = document.getElementById("debugHudButtonText");
+const levelEditorButton = document.getElementById("levelEditorButton");
 
 // Menu state
 let isMenuOpen = false;
@@ -532,6 +538,22 @@ debugHudButton.addEventListener("click", () => {
       debugHudButtonText.textContent = "Enable Debug HUD";
     }, 2000);
   }
+});
+
+// Level Editor button
+levelEditorButton.addEventListener("click", () => {
+  // Disconnect from game server
+  if (!isSpectator && playerId) {
+    socket.emit("spectate");
+    playerId = null;
+    isSpectator = true;
+  }
+
+  // Close menu and open level editor
+  toggleGameMenu();
+  levelEditor.open();
+
+  console.log("🎨 Opened level editor");
 });
 
 // Tab event listeners removed - no tabs needed

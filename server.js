@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { promises as fs } from "fs";
 import "dotenv/config";
 import { createClient } from "redis";
 import performanceMonitor from "./performance-monitor.js";
@@ -932,6 +933,125 @@ app.post("/api/state/import", express.json({ limit: "10mb" }), (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to import state", details: error.message });
+  }
+});
+
+// ====== LEVEL EDITOR ENDPOINTS ======
+
+const LEVELS_DIR = join(__dirname, "levels");
+
+// Ensure levels directory exists
+async function ensureLevelsDir() {
+  try {
+    await fs.mkdir(LEVELS_DIR, { recursive: true });
+  } catch (error) {
+    console.error("Failed to create levels directory:", error);
+  }
+}
+ensureLevelsDir();
+
+// Save a level
+app.post("/api/levels/save", async (req, res) => {
+  try {
+    const levelData = req.body;
+
+    if (!levelData.name) {
+      return res.status(400).send("Level name is required");
+    }
+
+    // Sanitize filename
+    const filename = levelData.name.replace(/[^a-z0-9_-]/gi, "_") + ".json";
+    const filepath = join(LEVELS_DIR, filename);
+
+    await fs.writeFile(filepath, JSON.stringify(levelData, null, 2));
+    console.log(`✅ Saved level: ${filename}`);
+
+    res.json({ success: true, filename });
+  } catch (error) {
+    console.error("❌ Error saving level:", error);
+    res.status(500).send("Failed to save level");
+  }
+});
+
+// Load a level
+app.get("/api/levels/load/:name", async (req, res) => {
+  try {
+    const name = req.params.name;
+    const filename = name.replace(/[^a-z0-9_-]/gi, "_") + ".json";
+    const filepath = join(LEVELS_DIR, filename);
+
+    const data = await fs.readFile(filepath, "utf-8");
+    const levelData = JSON.parse(data);
+
+    console.log(`✅ Loaded level: ${filename}`);
+    res.json(levelData);
+  } catch (error) {
+    console.error("❌ Error loading level:", error);
+    res.status(404).send("Level not found");
+  }
+});
+
+// List all saved levels
+app.get("/api/levels/list", async (req, res) => {
+  try {
+    const files = await fs.readdir(LEVELS_DIR);
+    const levelNames = files
+      .filter((file) => file.endsWith(".json"))
+      .map((file) => file.replace(".json", ""));
+
+    res.json(levelNames);
+  } catch (error) {
+    console.error("❌ Error listing levels:", error);
+    res.json([]);
+  }
+});
+
+// Apply a level to the game
+app.post("/api/levels/apply", async (req, res) => {
+  try {
+    const levelData = req.body;
+
+    if (!levelData) {
+      return res.status(400).send("Level data is required");
+    }
+
+    // Update game configuration
+    GAME_CONFIG.WORLD_WIDTH = levelData.width || 2000;
+    GAME_CONFIG.WORLD_HEIGHT = levelData.height || 2000;
+
+    // Update walls and crates
+    WALLS.length = 0;
+    WALLS.push(...(levelData.walls || []));
+    CRATES.length = 0;
+    CRATES.push(...(levelData.crates || []));
+
+    // Update spawn points
+    SPAWN_POINTS.length = 0;
+    SPAWN_POINTS.push(...(levelData.spawnPoints || []));
+
+    // Update waypoints
+    STRATEGIC_WAYPOINTS.length = 0;
+    STRATEGIC_WAYPOINTS.push(...(levelData.waypoints || []));
+
+    // Reinitialize pickups
+    gameState.pickups = [];
+    gameState.nextPickupId = 0;
+    (levelData.pickups || []).forEach((pickup) => {
+      gameState.pickups.push({
+        id: gameState.nextPickupId++,
+        x: pickup.x,
+        y: pickup.y,
+        type: pickup.type,
+        active: true,
+        respawnAt: null,
+      });
+    });
+
+    console.log(`✅ Applied level: ${levelData.name}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("❌ Error applying level:", error);
+    res.status(500).send("Failed to apply level");
   }
 });
 
