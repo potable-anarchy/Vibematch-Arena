@@ -2616,7 +2616,7 @@ io.on("connection", (socket) => {
   // Activate persistent mod that runs every game tick
   socket.on("activatePersistentMod", (data) => {
     try {
-      const { code, durationMs, name, description } = data;
+      const { code, durationMs, name, description, targetScope, targetPlayerId, targetPlayerName } = data;
       const playerId = socket.id;
       const player = gameState.players.get(playerId);
       const isSpectator = !player;
@@ -2625,23 +2625,34 @@ io.on("connection", (socket) => {
       const maxDuration = 300000;
       const duration = Math.min(durationMs || 60000, maxDuration);
 
+      // Get activator name for logging
+      const activatorName = isSpectator ? socket.id : player.name;
+
+      // Determine target scope
+      const scope = targetScope || 'player';
+      const targetId = targetPlayerId || playerId;
+      const targetName = targetPlayerName || activatorName;
+
       if (isSpectator) {
         console.log(
-          `👻 Activating persistent mod for spectator ${socket.id} (${duration / 1000}s)`,
+          `👻 Activating persistent mod for spectator ${socket.id} (${duration / 1000}s, scope: ${scope})`,
         );
       } else {
         console.log(
-          `⚡ Activating persistent mod for ${player.name} (${duration / 1000}s)`,
+          `⚡ Activating persistent mod for ${player.name} (${duration / 1000}s, scope: ${scope}, target: ${targetName})`,
         );
       }
 
-      // Add to active mods database
+      // Add to active mods database with target scope
       const modId = addActiveMod(
         playerId,
         code,
         duration,
         name || `persistent_${Date.now()}`,
         description,
+        scope,
+        targetId,
+        targetName,
       );
 
       socket.emit("persistentModResult", {
@@ -2657,7 +2668,7 @@ io.on("connection", (socket) => {
         );
       } else {
         console.log(
-          `✅ Persistent mod ${modId} activated for ${player.name}, expires in ${duration / 1000}s`,
+          `✅ Persistent mod ${modId} activated for ${player.name}, scope: ${scope}, target: ${targetName}, expires in ${duration / 1000}s`,
         );
       }
     } catch (error) {
@@ -3868,6 +3879,26 @@ function gameLoop() {
     if (now - lastStateBroadcast >= STATE_BROADCAST_INTERVAL) {
       lastStateBroadcast = now;
 
+      // Get active mods for broadcast
+      const activeMods = getActiveMods();
+      const modsForBroadcast = activeMods.map((mod) => {
+        // Get player name who activated the mod
+        const activator = gameState.players.get(mod.player_id) || gameState.bots.get(mod.player_id);
+        const activatorName = activator ? activator.name : 'Unknown';
+
+        return {
+          id: mod.id,
+          name: mod.name || mod.description || 'Unknown Mod',
+          description: mod.description,
+          activatorId: mod.player_id,
+          activatorName: activatorName,
+          targetScope: mod.target_scope || 'player',
+          targetPlayerId: mod.target_player_id,
+          targetPlayerName: mod.target_player_name,
+          expiresAt: mod.expires_at,
+        };
+      });
+
       const state = {
         players: allPlayers.map((p) => ({
           id: p.id,
@@ -3898,6 +3929,7 @@ function gameLoop() {
           y: Math.round(p.y),
           angle: Math.round(p.angle * 100) / 100,
         })),
+        activeMods: modsForBroadcast,
       };
 
       const stateString = JSON.stringify(state);

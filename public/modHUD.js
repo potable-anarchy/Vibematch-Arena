@@ -1,7 +1,8 @@
 // HUD display for active mods with countdown timers
 export class ModHUD {
   constructor() {
-    this.activeMods = new Map(); // modName -> { playerName, expiresAt, element }
+    this.activeMods = new Map(); // modId -> { element, data }
+    this.generatingMods = new Map(); // tempId -> { element, data }
     this.createUI();
     this.startUpdateLoop();
   }
@@ -62,98 +63,7 @@ export class ModHUD {
     document.body.appendChild(this.container);
   }
 
-  addMod(modName, playerName, durationMs = 30000) {
-    const expiresAt = Date.now() + durationMs;
-
-    // Create mod entry element
-    const modElement = document.createElement("div");
-    modElement.style.cssText = `
-      background: rgba(102, 204, 255, 0.1);
-      border-left: 3px solid #66ccff;
-      padding: 8px;
-      border-radius: 3px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    `;
-
-    // Mod name
-    const nameDiv = document.createElement("div");
-    nameDiv.style.cssText = `
-      color: #66ff66;
-      font-weight: bold;
-      font-size: 11px;
-    `;
-    nameDiv.textContent = modName;
-
-    // Player name
-    const playerDiv = document.createElement("div");
-    playerDiv.style.cssText = `
-      color: #ffaa00;
-      font-size: 10px;
-    `;
-    playerDiv.textContent = `By: ${playerName}`;
-
-    // Timer bar and text container
-    const timerContainer = document.createElement("div");
-    timerContainer.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 4px;
-    `;
-
-    // Timer text
-    const timerText = document.createElement("div");
-    timerText.className = "modTimer";
-    timerText.style.cssText = `
-      color: #66ccff;
-      font-size: 10px;
-      min-width: 30px;
-    `;
-
-    // Timer progress bar
-    const progressBar = document.createElement("div");
-    progressBar.style.cssText = `
-      flex: 1;
-      height: 4px;
-      background: rgba(102, 204, 255, 0.2);
-      border-radius: 2px;
-      overflow: hidden;
-    `;
-
-    const progressFill = document.createElement("div");
-    progressFill.className = "modProgressFill";
-    progressFill.style.cssText = `
-      height: 100%;
-      background: linear-gradient(90deg, #66ccff 0%, #66ff66 100%);
-      width: 100%;
-      transition: width 0.1s linear;
-    `;
-
-    progressBar.appendChild(progressFill);
-    timerContainer.appendChild(timerText);
-    timerContainer.appendChild(progressBar);
-
-    modElement.appendChild(nameDiv);
-    modElement.appendChild(playerDiv);
-    modElement.appendChild(timerContainer);
-
-    this.listContainer.appendChild(modElement);
-
-    // Store mod data
-    this.activeMods.set(modName, {
-      playerName,
-      expiresAt,
-      element: modElement,
-      timerText,
-      progressFill,
-      durationMs,
-    });
-
-    this.updateVisibility();
-    this.updateCount();
-  }
+  // Removed addMod - mods are now managed by syncFromServerState only
 
   addGeneratingMod(modId, prompt, playerName) {
     // Create mod entry element with generating state
@@ -191,8 +101,8 @@ export class ModHUD {
 
     this.listContainer.insertBefore(modElement, this.listContainer.firstChild);
 
-    // Store temporary mod data
-    this.activeMods.set(modId, {
+    // Store temporary mod data in generatingMods map
+    this.generatingMods.set(modId, {
       playerName,
       element: modElement,
       isGenerating: true,
@@ -237,10 +147,10 @@ export class ModHUD {
 
     this.listContainer.insertBefore(modElement, this.listContainer.firstChild);
 
-    // Store error mod data with 5 second auto-remove
+    // Store error mod data with 5 second auto-remove in generatingMods map
     const errorId = `error_${Date.now()}`;
     const expiresAt = Date.now() + 5000;
-    this.activeMods.set(errorId, {
+    this.generatingMods.set(errorId, {
       element: modElement,
       expiresAt,
       isError: true,
@@ -251,7 +161,15 @@ export class ModHUD {
   }
 
   removeMod(modName) {
-    const modData = this.activeMods.get(modName);
+    // Check both active and generating maps
+    let modData = this.activeMods.get(modName);
+    let isGenerating = false;
+
+    if (!modData) {
+      modData = this.generatingMods.get(modName);
+      isGenerating = true;
+    }
+
     if (modData) {
       // Fade out animation
       modData.element.style.transition = "opacity 0.3s";
@@ -261,7 +179,11 @@ export class ModHUD {
         if (modData.element.parentNode) {
           modData.element.parentNode.removeChild(modData.element);
         }
-        this.activeMods.delete(modName);
+        if (isGenerating) {
+          this.generatingMods.delete(modName);
+        } else {
+          this.activeMods.delete(modName);
+        }
         this.updateVisibility();
         this.updateCount();
       }, 300);
@@ -269,7 +191,8 @@ export class ModHUD {
   }
 
   updateVisibility() {
-    if (this.activeMods.size > 0) {
+    const totalMods = this.activeMods.size + this.generatingMods.size;
+    if (totalMods > 0) {
       this.container.style.display = "block";
     } else {
       this.container.style.display = "none";
@@ -279,7 +202,8 @@ export class ModHUD {
   updateCount() {
     const countElement = document.getElementById("modCount");
     if (countElement) {
-      countElement.textContent = this.activeMods.size;
+      const totalMods = this.activeMods.size + this.generatingMods.size;
+      countElement.textContent = totalMods;
     }
   }
 
@@ -287,36 +211,22 @@ export class ModHUD {
     // Update every 100ms for smooth countdown
     setInterval(() => {
       const now = Date.now();
-      const toRemove = [];
 
-      this.activeMods.forEach((modData, modName) => {
-        // Skip generating mods (no timer)
-        if (modData.isGenerating) {
-          return;
-        }
+      // Update timers for active mods (from server)
+      this.activeMods.forEach((modData, modId) => {
+        if (!modData.data || !modData.data.expiresAt) return;
 
-        // Handle error mods with expiration
-        if (modData.isError) {
-          const remaining = modData.expiresAt - now;
-          if (remaining <= 0) {
-            toRemove.push(modName);
-          }
-          return;
-        }
+        const remaining = modData.data.expiresAt - now;
+        const totalDuration = modData.data.expiresAt - (modData.data.createdAt || modData.data.expiresAt - 30000);
 
-        // Handle normal mods with timers
-        const remaining = modData.expiresAt - now;
-
-        if (remaining <= 0) {
-          toRemove.push(modName);
-        } else {
+        if (remaining > 0) {
           // Update timer text
           const seconds = Math.ceil(remaining / 1000);
           modData.timerText.textContent = `${seconds}s`;
 
           // Update progress bar
-          const progress = (remaining / modData.durationMs) * 100;
-          modData.progressFill.style.width = `${progress}%`;
+          const progress = (remaining / totalDuration) * 100;
+          modData.progressFill.style.width = `${Math.max(0, Math.min(100, progress))}%`;
 
           // Change color when time is running out
           if (remaining < 10000) {
@@ -334,14 +244,190 @@ export class ModHUD {
         }
       });
 
-      // Remove expired mods
-      toRemove.forEach((modName) => this.removeMod(modName));
+      // Update generating mods (local only)
+      const generatingToRemove = [];
+      this.generatingMods.forEach((modData, modId) => {
+        if (modData.isError && modData.expiresAt) {
+          const remaining = modData.expiresAt - now;
+          if (remaining <= 0) {
+            generatingToRemove.push(modId);
+          }
+        }
+      });
+
+      // Remove expired generating/error mods
+      generatingToRemove.forEach((modId) => {
+        const modData = this.generatingMods.get(modId);
+        if (modData && modData.element.parentNode) {
+          modData.element.style.transition = "opacity 0.3s";
+          modData.element.style.opacity = "0";
+          setTimeout(() => {
+            if (modData.element.parentNode) {
+              modData.element.parentNode.removeChild(modData.element);
+            }
+            this.generatingMods.delete(modId);
+            this.updateVisibility();
+            this.updateCount();
+          }, 300);
+        }
+      });
     }, 100);
   }
 
   clearAllMods() {
     this.activeMods.forEach((modData, modName) => {
       this.removeMod(modName);
+    });
+  }
+
+  // Sync mods from server state
+  syncFromServerState(serverMods, currentPlayerId) {
+    if (!serverMods || !Array.isArray(serverMods)) {
+      // Clear all mods if no server data
+      this.activeMods.forEach((modData, modId) => {
+        if (modData.element.parentNode) {
+          modData.element.parentNode.removeChild(modData.element);
+        }
+      });
+      this.activeMods.clear();
+      this.updateVisibility();
+      this.updateCount();
+      return;
+    }
+
+    // Create a set of current server mod IDs
+    const serverModIds = new Set(serverMods.map(m => m.id));
+
+    // Remove mods that are no longer on the server
+    const toRemove = [];
+    this.activeMods.forEach((modData, modId) => {
+      if (!serverModIds.has(modId)) {
+        toRemove.push(modId);
+      }
+    });
+    toRemove.forEach(modId => this.removeMod(modId));
+
+    // Add or update mods from server
+    serverMods.forEach(mod => {
+      const existing = this.activeMods.get(mod.id);
+
+      if (!existing) {
+        // New mod - create it
+        this.createModElement(mod, currentPlayerId);
+      } else {
+        // Existing mod - update if needed (mainly for timer updates handled in updateLoop)
+        existing.data = mod;
+      }
+    });
+
+    this.updateVisibility();
+    this.updateCount();
+  }
+
+  createModElement(mod, currentPlayerId) {
+    const modElement = document.createElement("div");
+    modElement.style.cssText = `
+      background: rgba(102, 204, 255, 0.1);
+      border-left: 3px solid #66ccff;
+      padding: 8px;
+      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    `;
+
+    // Mod name
+    const nameDiv = document.createElement("div");
+    nameDiv.style.cssText = `
+      color: #66ff66;
+      font-weight: bold;
+      font-size: 11px;
+    `;
+    nameDiv.textContent = mod.name || mod.description || 'Unknown Mod';
+
+    // Target scope info
+    const targetDiv = document.createElement("div");
+    targetDiv.style.cssText = `
+      color: #ffaa00;
+      font-size: 10px;
+    `;
+
+    let targetText = '';
+    if (mod.targetScope === 'global') {
+      targetText = 'Global (All Players)';
+    } else if (mod.targetScope === 'not_player') {
+      targetText = `Not ${mod.targetPlayerName || 'Unknown'}`;
+    } else if (mod.targetScope === 'players') {
+      targetText = `Multiple Players`;
+    } else {
+      // Default to showing who it affects
+      targetText = mod.targetPlayerName || mod.activatorName || 'Unknown Player';
+    }
+    targetDiv.textContent = `→ ${targetText}`;
+
+    // Activator info
+    const activatorDiv = document.createElement("div");
+    activatorDiv.style.cssText = `
+      color: #66ccff;
+      font-size: 9px;
+      opacity: 0.8;
+    `;
+    activatorDiv.textContent = `By: ${mod.activatorName || 'Unknown'}`;
+
+    // Timer bar and text container
+    const timerContainer = document.createElement("div");
+    timerContainer.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    `;
+
+    // Timer text
+    const timerText = document.createElement("div");
+    timerText.className = "modTimer";
+    timerText.style.cssText = `
+      color: #66ccff;
+      font-size: 10px;
+      min-width: 30px;
+    `;
+
+    // Timer progress bar
+    const progressBar = document.createElement("div");
+    progressBar.style.cssText = `
+      flex: 1;
+      height: 4px;
+      background: rgba(102, 204, 255, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+    `;
+
+    const progressFill = document.createElement("div");
+    progressFill.className = "modProgressFill";
+    progressFill.style.cssText = `
+      height: 100%;
+      background: linear-gradient(90deg, #66ccff 0%, #66ff66 100%);
+      width: 100%;
+      transition: width 0.1s linear;
+    `;
+
+    progressBar.appendChild(progressFill);
+    timerContainer.appendChild(timerText);
+    timerContainer.appendChild(progressBar);
+
+    modElement.appendChild(nameDiv);
+    modElement.appendChild(targetDiv);
+    modElement.appendChild(activatorDiv);
+    modElement.appendChild(timerContainer);
+
+    this.listContainer.appendChild(modElement);
+
+    // Store mod data
+    this.activeMods.set(mod.id, {
+      element: modElement,
+      timerText,
+      progressFill,
+      data: mod,
     });
   }
 }

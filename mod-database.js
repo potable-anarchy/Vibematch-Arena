@@ -43,7 +43,10 @@ db.exec(`
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
     name TEXT,
-    description TEXT
+    description TEXT,
+    target_scope TEXT DEFAULT 'player',
+    target_player_id TEXT,
+    target_player_name TEXT
   )
 `);
 
@@ -125,10 +128,13 @@ export function addActiveMod(
   durationMs,
   name = null,
   description = null,
+  targetScope = 'player',
+  targetPlayerId = null,
+  targetPlayerName = null,
 ) {
   const stmt = db.prepare(`
-    INSERT INTO active_mods (player_id, code, created_at, expires_at, name, description)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO active_mods (player_id, code, created_at, expires_at, name, description, target_scope, target_player_id, target_player_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const now = Date.now();
@@ -139,10 +145,13 @@ export function addActiveMod(
     now + durationMs,
     name,
     description,
+    targetScope,
+    targetPlayerId,
+    targetPlayerName,
   );
 
   console.log(
-    `⚡ Added active mod for player ${playerId}, expires in ${durationMs / 1000}s`,
+    `⚡ Added active mod for player ${playerId}, scope: ${targetScope}, expires in ${durationMs / 1000}s`,
   );
   return result.lastInsertRowid;
 }

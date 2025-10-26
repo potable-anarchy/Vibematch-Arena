@@ -689,6 +689,11 @@ socket.on("state", (state) => {
   gameState = state;
   updateHUD();
   updateScoreboard();
+
+  // Sync ModHUD with server active mods
+  if (modEditor && modEditor.modHUD && state.activeMods) {
+    modEditor.modHUD.syncFromServerState(state.activeMods, socket.id);
+  }
 });
 
 // Get interpolated game state for smooth rendering

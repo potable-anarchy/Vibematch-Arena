@@ -248,37 +248,41 @@ export class ModEditor {
         name: modName,
       });
       this.socket.once("serverModResult", (res) => {
-        if (res.success) {
-          // Server mods are instant, show brief notification in HUD
-          this.modHUD.addMod(originalPrompt, this.playerName, 3000);
-        } else {
+        if (!res.success) {
           this.modHUD.addErrorMod(originalPrompt, res.error);
         }
+        // Note: Success is silent - server mods are instant actions, not persistent effects
       });
     } else if (result.type === "persistent") {
       // Continuous server effect
+      // Determine target scope from result or default to player
+      const targetScope = result.targetScope || 'player';
+      const targetPlayerId = result.targetPlayerId || null;
+      const targetPlayerName = result.targetPlayerName || this.playerName;
+
       this.socket.emit("activatePersistentMod", {
         code: result.code,
         durationMs: 30000,
         name: modName,
         description: originalPrompt,
+        targetScope: targetScope,
+        targetPlayerId: targetPlayerId,
+        targetPlayerName: targetPlayerName,
       });
 
       this.socket.once("persistentModResult", (res) => {
-        if (res.success) {
-          this.modHUD.addMod(originalPrompt, this.playerName, res.duration);
-        } else {
+        // Note: Server will now broadcast mod in game state, so no need to manually add to HUD
+        if (!res.success) {
           this.modHUD.addErrorMod(originalPrompt, res.error);
         }
       });
     } else {
-      // Client-side mod
+      // Client-side mod - these are loaded immediately and don't show in the server HUD
       const loadResult = this.modSystem.loadMod(modName, result.code);
-      if (loadResult.success) {
-        this.modHUD.addMod(originalPrompt, this.playerName, 30000);
-      } else {
+      if (!loadResult.success) {
         this.modHUD.addErrorMod(originalPrompt, loadResult.message);
       }
+      // Note: Client-side mods are instantly active and don't expire, so no HUD entry
     }
   }
 
