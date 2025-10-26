@@ -2065,6 +2065,7 @@ function createPlayer(id, name) {
     invulnerable: Date.now() + GAME_CONFIG.SPAWN_INVULN_TIME,
     respawnAt: null,
     lastFootstepSound: 0,
+    modCooldownEnd: 0, // Timestamp when mod generation becomes available
   };
 }
 
@@ -2260,6 +2261,22 @@ function damagePlayer(player, damage, attackerId) {
           // Award credits for kill (10 in Vibe Royale, 5 in deathmatch)
           const creditsPerKill = gameState.gameMode === "vibe-royale" ? 10 : 5;
           attacker.credits += creditsPerKill;
+
+          // Reduce mod cooldown by 5 seconds for kill
+          const now = Date.now();
+          if (attacker.modCooldownEnd > now) {
+            attacker.modCooldownEnd = Math.max(
+              now,
+              attacker.modCooldownEnd - 5000,
+            );
+            const remainingSeconds = Math.ceil(
+              (attacker.modCooldownEnd - now) / 1000,
+            );
+            io.to(attackerId).emit("modCooldownUpdate", {
+              cooldownEnd: attacker.modCooldownEnd,
+              remainingSeconds,
+            });
+          }
 
           // Track kill for performance metrics
           performanceMonitor.recordKill();
@@ -2612,6 +2629,27 @@ io.on("connection", (socket) => {
       const player = gameState.players.get(playerId);
       const isSpectator = !player;
 
+      // Check cooldown for non-spectators
+      if (!isSpectator) {
+        const now = Date.now();
+        if (player.modCooldownEnd > now) {
+          const remainingSeconds = Math.ceil(
+            (player.modCooldownEnd - now) / 1000,
+          );
+          socket.emit("modCooldownActive", { remainingSeconds });
+          return;
+        }
+
+        // Set cooldown (45 seconds)
+        player.modCooldownEnd = now + 45000;
+
+        // Notify client of new cooldown
+        socket.emit("modCooldownStart", {
+          cooldownEnd: player.modCooldownEnd,
+          durationMs: 45000,
+        });
+      }
+
       if (isSpectator) {
         console.log(
           `👻 Spectator ${socket.id} executing server mod: ${name || "unnamed"}`,
@@ -2800,6 +2838,27 @@ io.on("connection", (socket) => {
       const playerId = socket.id;
       const player = gameState.players.get(playerId);
       const isSpectator = !player;
+
+      // Check cooldown for non-spectators
+      if (!isSpectator) {
+        const now = Date.now();
+        if (player.modCooldownEnd > now) {
+          const remainingSeconds = Math.ceil(
+            (player.modCooldownEnd - now) / 1000,
+          );
+          socket.emit("modCooldownActive", { remainingSeconds });
+          return;
+        }
+
+        // Set cooldown (45 seconds)
+        player.modCooldownEnd = now + 45000;
+
+        // Notify client of new cooldown
+        socket.emit("modCooldownStart", {
+          cooldownEnd: player.modCooldownEnd,
+          durationMs: 45000,
+        });
+      }
 
       // Validate duration (max 5 minutes = 300000ms)
       const maxDuration = 300000;
@@ -3101,6 +3160,25 @@ function detonateGrenade(grenade) {
 
         if (thrower && grenade.throwerId !== player.id) {
           thrower.kills++;
+
+          // Reduce mod cooldown by 5 seconds for kill (only for players, not bots)
+          if (gameState.players.has(grenade.throwerId)) {
+            const now = Date.now();
+            if (thrower.modCooldownEnd > now) {
+              thrower.modCooldownEnd = Math.max(
+                now,
+                thrower.modCooldownEnd - 5000,
+              );
+              const remainingSeconds = Math.ceil(
+                (thrower.modCooldownEnd - now) / 1000,
+              );
+              io.to(grenade.throwerId).emit("modCooldownUpdate", {
+                cooldownEnd: thrower.modCooldownEnd,
+                remainingSeconds,
+              });
+            }
+          }
+
           io.emit("kill", {
             killerId: grenade.throwerId,
             killerName: grenade.throwerName,
@@ -3161,6 +3239,25 @@ function detonateGrenade(grenade) {
 
         if (thrower && grenade.throwerId !== bot.id) {
           thrower.kills++;
+
+          // Reduce mod cooldown by 5 seconds for kill (only for players, not bots)
+          if (gameState.players.has(grenade.throwerId)) {
+            const now = Date.now();
+            if (thrower.modCooldownEnd > now) {
+              thrower.modCooldownEnd = Math.max(
+                now,
+                thrower.modCooldownEnd - 5000,
+              );
+              const remainingSeconds = Math.ceil(
+                (thrower.modCooldownEnd - now) / 1000,
+              );
+              io.to(grenade.throwerId).emit("modCooldownUpdate", {
+                cooldownEnd: thrower.modCooldownEnd,
+                remainingSeconds,
+              });
+            }
+          }
+
           io.emit("kill", {
             killerId: grenade.throwerId,
             killerName: grenade.throwerName,

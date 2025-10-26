@@ -10,12 +10,40 @@ export class ModEditor {
     this.modHUD = new ModHUD();
     this.playerName = "Unknown";
 
-    // Cooldown system
-    this.cooldownSeconds = 45;
-    this.cooldownRemaining = 0;
+    // Cooldown system (server-controlled)
+    this.cooldownEnd = 0; // Server timestamp when cooldown ends
     this.cooldownInterval = null;
 
     this.createUI();
+    this.setupServerCooldownHandlers();
+  }
+
+  setupServerCooldownHandlers() {
+    // Wait for socket to be set
+    const checkSocket = setInterval(() => {
+      if (this.socket) {
+        clearInterval(checkSocket);
+
+        // Listen for cooldown events from server
+        this.socket.on("modCooldownStart", (data) => {
+          this.cooldownEnd = data.cooldownEnd;
+          this.startCooldownTimer();
+        });
+
+        this.socket.on("modCooldownUpdate", (data) => {
+          this.cooldownEnd = data.cooldownEnd;
+          // Timer will pick up the new value automatically
+        });
+
+        this.socket.on("modCooldownActive", (data) => {
+          // Server rejected our mod generation due to cooldown
+          this.showStatus(
+            `// Cooldown: ${data.remainingSeconds}s remaining (kills reduce by 5s)`,
+            "#ff9800",
+          );
+        });
+      }
+    }, 100);
   }
 
   async createUI() {
@@ -202,18 +230,7 @@ export class ModEditor {
       return;
     }
 
-    // Check cooldown
-    if (this.cooldownRemaining > 0) {
-      this.showStatus(
-        `// Cooldown: ${this.cooldownRemaining}s remaining (kills reduce by 5s)`,
-        "#ff9800",
-      );
-      return;
-    }
-
-    // Start cooldown
-    this.startCooldown();
-
+    // Server will check cooldown - we just proceed
     // Hide terminal immediately
     this.hide();
 
@@ -425,23 +442,22 @@ export class ModEditor {
     this.status.style.color = color;
   }
 
-  startCooldown() {
-    this.cooldownRemaining = this.cooldownSeconds;
-
+  startCooldownTimer() {
     // Clear any existing interval
     if (this.cooldownInterval) {
       clearInterval(this.cooldownInterval);
     }
 
-    // Update cooldown every second
+    // Update cooldown display every second
     this.cooldownInterval = setInterval(() => {
-      this.cooldownRemaining--;
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((this.cooldownEnd - now) / 1000));
 
       // Update status if terminal is open
       if (this.visible) {
-        if (this.cooldownRemaining > 0) {
+        if (remaining > 0) {
           this.showStatus(
-            `// Cooldown: ${this.cooldownRemaining}s (kills reduce by 5s)`,
+            `// Cooldown: ${remaining}s (kills reduce by 5s)`,
             "#ff9800",
           );
         } else {
@@ -449,32 +465,11 @@ export class ModEditor {
         }
       }
 
-      if (this.cooldownRemaining <= 0) {
+      if (remaining <= 0) {
         clearInterval(this.cooldownInterval);
         this.cooldownInterval = null;
       }
     }, 1000);
-  }
-
-  reduceKillCooldown() {
-    if (this.cooldownRemaining > 0) {
-      this.cooldownRemaining = Math.max(0, this.cooldownRemaining - 5);
-      console.log(
-        `⏱️ Mod cooldown reduced! ${this.cooldownRemaining}s remaining`,
-      );
-
-      // Update status if terminal is open
-      if (this.visible) {
-        if (this.cooldownRemaining > 0) {
-          this.showStatus(
-            `// Cooldown: ${this.cooldownRemaining}s (kills reduce by 5s)`,
-            "#ff9800",
-          );
-        } else {
-          this.showStatus("// Ready", "#00ff00");
-        }
-      }
-    }
   }
 
   show() {
@@ -483,9 +478,12 @@ export class ModEditor {
     this.input.focus();
 
     // Show current cooldown status or ready
-    if (this.cooldownRemaining > 0) {
+    const now = Date.now();
+    const remaining = Math.max(0, Math.ceil((this.cooldownEnd - now) / 1000));
+
+    if (remaining > 0) {
       this.showStatus(
-        `// Cooldown: ${this.cooldownRemaining}s (kills reduce by 5s)`,
+        `// Cooldown: ${remaining}s (kills reduce by 5s)`,
         "#ff9800",
       );
     } else {
