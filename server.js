@@ -1076,23 +1076,30 @@ async function restoreStateFromRedis() {
     if (botsData) {
       const bots = JSON.parse(botsData);
       bots.forEach((b) => {
+        const now = Date.now();
         gameState.bots.set(b.id, {
           ...b,
+          isBot: true,
           vx: 0,
           vy: 0,
-          angle: 0,
-          isDead: false,
-          respawnTimer: null,
-          spawnInvulnUntil: null,
-          lastShotTime: 0,
-          thinkTimer: 0,
+          aimAngle: 0,
+          maxAmmo: WEAPONS[b.weapon || "pistol"].mag,
+          lastShot: 0,
+          reloading: false,
+          reloadFinish: 0,
+          invulnerable: now + GAME_CONFIG.SPAWN_INVULN_TIME,
+          respawnAt: null,
+          lastFootstepSound: 0,
+          // Bot AI state
           target: null,
-          targetLastSeen: null,
-          state: "roaming",
-          coverPosition: null,
-          pickupTarget: null,
-          strategicWaypoint: null,
-          waypointReachedTime: 0,
+          lastHeardSound: null,
+          wanderAngle: Math.random() * Math.PI * 2,
+          wanderTimer: now + Math.random() * 3000,
+          thinkTimer: now,
+          // Position tracking
+          areaCheckTimer: now,
+          lastAreaCheckPos: { x: b.x, y: b.y },
+          totalDistanceMoved: 0,
           modExecutionContext: {},
         });
       });
