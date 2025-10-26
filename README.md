@@ -165,6 +165,24 @@ http://localhost:5500?mods=false
 
 See `MODS.md` for complete mod API documentation and examples!
 
+## Documentation
+
+Comprehensive documentation is available in the `docs/` directory:
+
+- **[docs/README.md](docs/README.md)** - Documentation index (start here)
+- **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** - Complete setup guide
+- **[docs/MOD_DEVELOPMENT.md](docs/MOD_DEVELOPMENT.md)** - Mod creation guide for AI agents
+- **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** - Complete mod system API
+- **[docs/GAME_MECHANICS.md](docs/GAME_MECHANICS.md)** - Weapons, combat, pickups
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment
+- **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common issues
+
+### For AI Coding Agents
+
+- **[agents.md](agents.md)** - Quick reference for AI agents
+- **[.claude/instructions.md](.claude/instructions.md)** - Claude-specific instructions
+
 ## Future Enhancements
 
 - Additional weapons (rocket launcher, railgun, plasma)
