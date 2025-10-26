@@ -556,6 +556,28 @@ levelEditorButton.addEventListener("click", () => {
   console.log("🎨 Opened level editor");
 });
 
+// Game mode voting buttons
+const voteDeathmatchButton = document.getElementById("voteDeathmatchButton");
+const voteVibeRoyaleButton = document.getElementById("voteVibeRoyaleButton");
+const gameModeDisplay = document.getElementById("gameModeDisplay");
+const voteCountsDisplay = document.getElementById("voteCountsDisplay");
+
+voteDeathmatchButton.addEventListener("click", () => {
+  if (!isSpectator) {
+    socket.emit("voteGameMode", { gameMode: "deathmatch" });
+    voteDeathmatchButton.style.background = "#66ccff";
+    voteVibeRoyaleButton.style.background = "";
+  }
+});
+
+voteVibeRoyaleButton.addEventListener("click", () => {
+  if (!isSpectator) {
+    socket.emit("voteGameMode", { gameMode: "vibe-royale" });
+    voteVibeRoyaleButton.style.background = "#66ccff";
+    voteDeathmatchButton.style.background = "";
+  }
+});
+
 // Tab event listeners removed - no tabs needed
 
 // Socket connection events
@@ -846,6 +868,44 @@ socket.on("modActivated", async (data) => {
 
   setTimeout(() => {
     notification.style.animation = "slideOutRight 0.3s ease-in";
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+});
+
+// Game mode voting handlers
+socket.on("voteUpdate", (data) => {
+  const {votes, totalPlayers} = data;
+  voteCountsDisplay.textContent = `Votes: Deathmatch (${votes.deathmatch}) | Vibe Royale (${votes['vibe-royale']})`;
+});
+
+socket.on("gameModeChanged", (data) => {
+  const {gameMode} = data;
+  const displayName = gameMode === 'vibe-royale' ? 'Vibe Royale' : 'Deathmatch';
+  gameModeDisplay.textContent = `Current: ${displayName}`;
+
+  // Show notification
+  const notification = document.createElement("div");
+  notification.style.position = "fixed";
+  notification.style.top = "50%";
+  notification.style.left = "50%";
+  notification.style.transform = "translate(-50%, -50%)";
+  notification.style.backgroundColor = "rgba(255, 215, 0, 0.95)";
+  notification.style.border = "3px solid #ffd700";
+  notification.style.borderRadius = "10px";
+  notification.style.padding = "20px 40px";
+  notification.style.fontFamily = "monospace";
+  notification.style.fontSize = "24px";
+  notification.style.fontWeight = "bold";
+  notification.style.color = "#000";
+  notification.style.zIndex = "10000";
+  notification.style.textAlign = "center";
+  notification.textContent = `Game Mode: ${displayName}`;
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.transition = "opacity 0.3s";
+    notification.style.opacity = "0";
     setTimeout(() => notification.remove(), 300);
   }, 3000);
 });
@@ -1252,17 +1312,23 @@ function render(dt) {
   const renderState = getInterpolatedState();
   const player = renderState.players.find((p) => p.id === playerId);
 
-  // Spectator mode - follow top scoring alive player/bot
+  // Spectator mode - follow kill leader (or top scorer if no kill leader)
   if (!player && isSpectator) {
-    // Find top scoring alive player or bot
     let topScorer = null;
-    let topKills = -1;
 
-    // Check all players (use renderState for interpolated positions)
-    for (const p of renderState.players) {
-      if (p.health > 0 && p.kills > topKills) {
-        topKills = p.kills;
-        topScorer = p;
+    // In Vibe Royale mode, follow the kill leader
+    if (gameState.gameMode === 'vibe-royale' && gameState.killLeaderId) {
+      topScorer = renderState.players.find(p => p.id === gameState.killLeaderId && p.health > 0);
+    }
+
+    // Fallback: find top scoring alive player or bot
+    if (!topScorer) {
+      let topKills = -1;
+      for (const p of renderState.players) {
+        if (p.health > 0 && p.kills > topKills) {
+          topKills = p.kills;
+          topScorer = p;
+        }
       }
     }
 

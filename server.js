@@ -1068,6 +1068,9 @@ const gameState = {
   warmupEndTime: null, // When warmup ends (null = not in warmup)
   countdownStartTime: null, // When 5 second countdown starts (null = not counting down)
   roundActive: false, // Is the round currently active (scoring enabled)
+  gameMode: 'deathmatch', // Current game mode: 'deathmatch' or 'vibe-royale'
+  votes: new Map(), // Player votes for game mode: playerId -> gameMode
+  killLeaderId: null, // ID of player with most kills (for spectator camera in Vibe Royale)
 };
 
 // ====== REDIS STATE MANAGEMENT ======
@@ -1288,6 +1291,19 @@ const WEAPONS = {
     optimalRange: { min: 100, max: 300 },
     minEngageRange: 50,
     maxEngageRange: 400,
+  },
+  'dual-pistols': {
+    damage: 20,
+    rof: 12, // double rate of fire
+    mag: 24, // double ammo
+    reload: 2.4, // double reload time
+    range: 800,
+    bloom: 0.04, // half accuracy (double the bloom)
+    projectileSpeed: 1200,
+    // Bot tactical ranges
+    optimalRange: { min: 80, max: 280 },
+    minEngageRange: 40,
+    maxEngageRange: 380,
   },
   smg: {
     damage: 12,
@@ -2052,6 +2068,71 @@ function startCountdown() {
 }
 
 // Reset round - clears all scores and respawns everyone
+// Update the kill leader for spectator camera tracking
+function updateKillLeader() {
+  let maxKills = 0;
+  let leaderId = null;
+
+  // Check all players
+  for (const [id, player] of gameState.players) {
+    if (player.kills > maxKills && player.health > 0) {
+      maxKills = player.kills;
+      leaderId = id;
+    }
+  }
+
+  // Check all bots
+  for (const [id, bot] of gameState.bots) {
+    if (bot.kills > maxKills && bot.health > 0) {
+      maxKills = bot.kills;
+      leaderId = id;
+    }
+  }
+
+  gameState.killLeaderId = leaderId;
+}
+
+// Spawn a weapon pickup at a specific location
+function spawnWeaponPickup(x, y, weaponType) {
+  const pickup = {
+    id: gameState.nextPickupId++,
+    type: `weapon_${weaponType}`,
+    x,
+    y,
+    active: true,
+    respawnAt: null, // Dropped weapons don't respawn in Vibe Royale
+  };
+  gameState.pickups.push(pickup);
+  io.emit('pickupSpawned', pickup);
+}
+
+// Switch game mode
+function switchGameMode(newMode) {
+  console.log(`🎮 Switching game mode from ${gameState.gameMode} to ${newMode}`);
+
+  gameState.gameMode = newMode;
+  gameState.votes.clear(); // Clear all votes
+
+  // Notify all clients
+  io.emit('gameModeChanged', { gameMode: newMode });
+
+  // Reset the round to apply new rules
+  // Reset all player scores
+  for (const [id, player] of gameState.players) {
+    player.kills = 0;
+    player.deaths = 0;
+  }
+
+  // Reset all bot scores
+  for (const [id, bot] of gameState.bots) {
+    bot.kills = 0;
+    bot.deaths = 0;
+  }
+
+  // Start new warmup
+  startWarmup();
+}
+
 function resetRound(winnerId, winnerName) {
   console.log(
     `🏆 ROUND OVER! Winner: ${winnerName} with ${GAME_CONFIG.SCORE_LIMIT} kills`,
@@ -2107,20 +2188,31 @@ function damagePlayer(player, damage, attackerId) {
 
       // Track death for performance metrics
       performanceMonitor.recordDeath();
+
+      // In Vibe Royale mode, drop the player's weapon
+      if (gameState.gameMode === 'vibe-royale' && player.weapon && player.weapon !== 'pistol') {
+        const weaponToDrop = player.weapon === 'dual-pistols' ? 'pistol' : player.weapon;
+        spawnWeaponPickup(player.x, player.y, weaponToDrop);
+      }
+
       if (attackerId && attackerId !== player.id) {
         // Check if attacker is a player
         const attacker = gameState.players.get(attackerId);
         if (attacker) {
           attacker.kills++;
 
-          // Award credits for kill (base: 5 credits)
-          attacker.credits += 5;
+          // Award credits for kill (10 in Vibe Royale, 5 in deathmatch)
+          const creditsPerKill = gameState.gameMode === 'vibe-royale' ? 10 : 5;
+          attacker.credits += creditsPerKill;
 
           // Track kill for performance metrics
           performanceMonitor.recordKill();
 
-          // Check if attacker reached score limit
-          if (attacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+          // Update kill leader
+          updateKillLeader();
+
+          // Check if attacker reached score limit (only in deathmatch)
+          if (gameState.gameMode === 'deathmatch' && attacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
             // Reset round after a short delay (3 seconds)
             setTimeout(() => {
               resetRound(attacker.id, attacker.name);
@@ -2132,14 +2224,18 @@ function damagePlayer(player, damage, attackerId) {
           if (botAttacker) {
             botAttacker.kills++;
 
-            // Award credits for kill (base: 5 credits)
-            botAttacker.credits += 5;
+            // Award credits for kill (10 in Vibe Royale, 5 in deathmatch)
+            const creditsPerKill = gameState.gameMode === 'vibe-royale' ? 10 : 5;
+            botAttacker.credits += creditsPerKill;
 
             // Track kill for performance metrics
             performanceMonitor.recordKill();
 
-            // Check if bot reached score limit
-            if (botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
+            // Update kill leader
+            updateKillLeader();
+
+            // Check if bot reached score limit (only in deathmatch)
+            if (gameState.gameMode === 'deathmatch' && botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT) {
               // Reset round after a short delay (3 seconds)
               setTimeout(() => {
                 resetRound(botAttacker.id, botAttacker.name);
@@ -2149,7 +2245,12 @@ function damagePlayer(player, damage, attackerId) {
         }
       }
     }
-    player.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
+    // In Vibe Royale mode, no respawns
+    if (gameState.gameMode === 'vibe-royale') {
+      player.respawnAt = null; // Never respawn
+    } else {
+      player.respawnAt = Date.now() + GAME_CONFIG.RESPAWN_DELAY;
+    }
     return true; // Player died
   }
 
@@ -2677,6 +2778,47 @@ io.on("connection", (socket) => {
         error: error.message,
         stack: error.stack,
       });
+    }
+  });
+
+  // Handle game mode voting
+  socket.on("voteGameMode", (data) => {
+    const { gameMode } = data;
+    const playerId = socket.id;
+    const player = gameState.players.get(playerId);
+
+    if (!player) return; // Only players can vote, not spectators
+
+    // Validate game mode
+    if (gameMode !== 'deathmatch' && gameMode !== 'vibe-royale') {
+      return;
+    }
+
+    // Record vote
+    gameState.votes.set(playerId, gameMode);
+
+    // Count votes
+    const voteCounts = { deathmatch: 0, 'vibe-royale': 0 };
+    for (const [id, mode] of gameState.votes) {
+      if (gameState.players.has(id)) {
+        voteCounts[mode]++;
+      }
+    }
+
+    // Broadcast vote update to all players
+    io.emit("voteUpdate", {
+      votes: voteCounts,
+      totalPlayers: gameState.players.size,
+    });
+
+    // If majority votes for a different mode, switch modes
+    const totalVotes = voteCounts.deathmatch + voteCounts['vibe-royale'];
+    const currentMode = gameState.gameMode;
+
+    if (voteCounts['vibe-royale'] > gameState.players.size / 2 && currentMode !== 'vibe-royale') {
+      switchGameMode('vibe-royale');
+    } else if (voteCounts.deathmatch > gameState.players.size / 2 && currentMode !== 'deathmatch') {
+      switchGameMode('deathmatch');
     }
   });
 });
@@ -3698,7 +3840,18 @@ function gameLoop() {
           } else if (pickup.type.startsWith("weapon_")) {
             // Weapon pickup
             const newWeapon = config.weapon;
-            if (bot.weapon !== newWeapon) {
+
+            // Special case: picking up pistol while holding pistol = dual pistols
+            if (newWeapon === 'pistol' && bot.weapon === 'pistol') {
+              bot.weapon = 'dual-pistols';
+              bot.ammo = WEAPONS['dual-pistols'].mag;
+              bot.maxAmmo = WEAPONS['dual-pistols'].mag;
+              bot.reloading = false;
+              collected = true;
+            } else if (newWeapon === 'pistol' && bot.weapon === 'dual-pistols') {
+              // Already have dual pistols, don't downgrade
+              collected = false;
+            } else if (bot.weapon !== newWeapon) {
               bot.weapon = newWeapon;
               bot.ammo = WEAPONS[newWeapon].mag;
               bot.maxAmmo = WEAPONS[newWeapon].mag;
@@ -3847,7 +4000,18 @@ function gameLoop() {
           } else if (pickup.type.startsWith("weapon_")) {
             // Weapon pickup
             const newWeapon = config.weapon;
-            if (player.weapon !== newWeapon) {
+
+            // Special case: picking up pistol while holding pistol = dual pistols
+            if (newWeapon === 'pistol' && player.weapon === 'pistol') {
+              player.weapon = 'dual-pistols';
+              player.ammo = WEAPONS['dual-pistols'].mag;
+              player.maxAmmo = WEAPONS['dual-pistols'].mag;
+              player.reloading = false;
+              collected = true;
+            } else if (newWeapon === 'pistol' && player.weapon === 'dual-pistols') {
+              // Already have dual pistols, don't downgrade
+              collected = false;
+            } else if (player.weapon !== newWeapon) {
               player.weapon = newWeapon;
               player.ammo = WEAPONS[newWeapon].mag;
               player.maxAmmo = WEAPONS[newWeapon].mag;
@@ -3930,6 +4094,8 @@ function gameLoop() {
           angle: Math.round(p.angle * 100) / 100,
         })),
         activeMods: modsForBroadcast,
+        gameMode: gameState.gameMode,
+        killLeaderId: gameState.killLeaderId,
       };
 
       const stateString = JSON.stringify(state);
