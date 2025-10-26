@@ -1581,7 +1581,6 @@ function drawPickup(pickup) {
     health_big: "#ff3366",
     armor_light: "#99ddff",
     armor_heavy: "#66ccff",
-    ammo: "#ffaa00",
   };
 
   const color = colors[pickup.type] || "#ffffff";
@@ -1608,7 +1607,6 @@ function drawPickup(pickup) {
     health_big: "++",
     armor_light: "A",
     armor_heavy: "A+",
-    ammo: "O",
   };
   ctx.fillText(symbols[pickup.type] || "?", screenX, screenY);
 }

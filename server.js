@@ -1368,7 +1368,6 @@ const PICKUP_TYPES = {
   health_big: { amount: 50, respawn: 25000 },
   armor_light: { amount: 50, respawn: 30000 },
   armor_heavy: { amount: 100, respawn: 45000 },
-  ammo: { amount: 40, respawn: 20000 },
   weapon_smg: { weapon: "smg", respawn: 15000 },
   weapon_shotgun: { weapon: "shotgun", respawn: 20000 },
   weapon_rifle: { weapon: "rifle", respawn: 25000 },
@@ -1543,8 +1542,6 @@ function initializePickups() {
     { x: 1000, y: 1800, type: "health_big" },
     { x: 200, y: 1000, type: "armor_light" },
     { x: 1800, y: 1000, type: "armor_heavy" },
-    { x: 600, y: 600, type: "ammo" },
-    { x: 1400, y: 1400, type: "ammo" },
 
     // Weapon pickups
     { x: 400, y: 400, type: "weapon_smg" },
@@ -1665,12 +1662,6 @@ function findBestPickup(bot) {
         if (bot.armor < 30 && pickup.type === "armor_heavy") {
           priority *= 1.3;
         }
-      }
-    } else if (pickup.type === "ammo") {
-      const ammoMissing = WEAPONS[bot.weapon].mag - bot.ammo;
-      if (ammoMissing > 0) {
-        // Ammo is important but less than health/armor
-        priority = (ammoMissing / WEAPONS[bot.weapon].mag) * 1.5;
       }
     } else if (pickup.type.startsWith("weapon_")) {
       const config = PICKUP_TYPES[pickup.type];
