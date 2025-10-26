@@ -212,8 +212,8 @@ app.use(
       else if (path.match(/\.(js|css)$/)) {
         res.setHeader(
           "Cache-Control",
-          "public, max-age=86400, must-revalidate",
-        ); // 1 day
+          "no-cache, no-store, must-revalidate",
+        ); // No cache for development
       }
     },
   }),
