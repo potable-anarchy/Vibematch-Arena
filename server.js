@@ -210,10 +210,7 @@ app.use(
       }
       // Cache JS and CSS for 1 day but allow revalidation
       else if (path.match(/\.(js|css)$/)) {
-        res.setHeader(
-          "Cache-Control",
-          "no-cache, no-store, must-revalidate",
-        ); // No cache for development
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate"); // No cache for development
       }
     },
   }),
@@ -1027,10 +1024,17 @@ async function syncStateToRedis() {
 
 // Restore game state from Redis on startup
 async function restoreStateFromRedis() {
-  // Skip if Redis not ready
+  // Wait for Redis to be ready (up to 5 seconds)
   if (!redisClient.isReady) {
-    console.log("⚠️  Redis not ready - skipping state restore");
-    return false;
+    console.log("⏳ Waiting for Redis to be ready...");
+    const startTime = Date.now();
+    while (!redisClient.isReady && Date.now() - startTime < 5000) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!redisClient.isReady) {
+      console.log("⚠️  Redis not ready after 5s - skipping state restore");
+      return false;
+    }
   }
 
   try {
