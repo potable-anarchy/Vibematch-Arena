@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Deployment script for Deathmatch Arena on WSL with Cloudflare Tunnel
+# Deployment script for Vibematch-Arena on WSL with Cloudflare Tunnel
 
 set -e
 
-echo "🎮 Deathmatch Arena - Deployment Script"
+echo "🎮 Vibematch-Arena - Deployment Script"
 echo "========================================"
 
 # Check if .env exists
@@ -62,7 +62,7 @@ echo "✅ Deployment complete!"
 echo ""
 echo "🌐 Access your game:"
 echo "   Local:  http://100.104.133.109:5500"
-echo "   Public: https://your-tunnel-url.com (check Cloudflare dashboard)"
+echo "   Public: https://vibematch-arena.brad-dougherty.com"
 echo ""
 echo "📝 Useful commands:"
 echo "   View logs:    docker-compose logs -f"

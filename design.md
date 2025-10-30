@@ -1,12 +1,14 @@
-Multiplayer Deathmatch Arena — Design Document
+Multiplayer Vibematch-Arena — Design Document
 
-A top-down, Hotline-Miami-style shooter with Doom-y weapons, tight TTK, and a real health/armor system.
+A top-down, Hotline-Miami-style shooter with Doom-y weapons, tight TTK, a real health/armor system, and one massive twist: **AI-powered live coding that lets players hack gameplay in real-time.**
 
 ⸻
 
 1) High-Level Pitch
 
-Fast, sweaty, top-down deathmatch where you strafe with WASD / left stick, aim with mouse / right stick, and rip around tight arenas stacked with walls, doors, and line-of-sight traps. Think “Multiplayer Hotline Miami” pacing with a Doom-inspired arsenal, pickups (health, armor, ammo, power-ups), and short, high-intensity rounds. Server-authoritative netcode with client-side input prediction + lag compensation keeps it snappy.
+Fast, sweaty, top-down arena shooter where you strafe with WASD / left stick, aim with mouse / right stick, and rip around tight arenas stacked with walls, doors, and line-of-sight traps. Think "Multiplayer Hotline Miami" pacing with a Doom-inspired arsenal, pickups (health, armor, ammo, power-ups), and short, high-intensity rounds. Server-authoritative netcode with client-side input prediction + lag compensation keeps it snappy.
+
+**The Twist:** While playing, open the mod editor (backtick key) and write or AI-generate custom JavaScript that modifies the game loop. Hot-reload with Ctrl+Enter to instantly inject physics tweaks, visual effects, new mechanics, or wild experimental features—all without restarting. The game is your canvas.
 
 ⸻
 
@@ -15,6 +17,7 @@ Fast, sweaty, top-down deathmatch where you strafe with WASD / left stick, aim w
 	•	Frictionless movement: Momentum, slides, breakable props, readable collision.
 	•	Arena agency: Spawn waves of pickups, telegraphs on spawns, strong LOS control with walls/doors.
 	•	Low ceremony: 60–180s rounds; 1–2s respawns; no loadouts—map control decides.
+	•	**Hackable reality**: Live-coding mod system turns every match into a creative playground.
 
 ⸻
 
@@ -30,6 +33,8 @@ Keyboard & Mouse
 	•	Swap weapon: Q / MouseWheel
 	•	Dash (optional): Shift
 	•	Ping (optional): Middle Mouse
+	•	**Mod Editor**: ` (Backtick)
+	•	**Hot-Reload Mod**: Ctrl+Enter
 
 Dual-Stick Controller
 	•	Move: Left Stick
@@ -47,8 +52,8 @@ Aim Assist (controller): Mild magnetism cone + rotational dampening; disabled fo
 ⸻
 
 4) Game Modes
-	•	FFA Deathmatch: First to 20 frags or most kills at timer.
-	•	Team Deathmatch (2v2 / 3v3 / 4v4): 50 team frags or timer.
+	•	FFA Vibematch: First to 20 frags or most kills at timer.
+	•	Team Vibematch (2v2 / 3v3 / 4v4): 50 team frags or timer.
 	•	Duel (1v1, Best-of-5, 2-min rounds): Small map variant.
 	•	Arcade Mutators: Instagib, Low-Gravity, Vampirism, Big-Head (debug/fun).
 
@@ -87,7 +92,7 @@ Rocket	Area denial	100 splash (≤2m) / 80 direct	0.8 rps	4	Self-damage 40; rock
 Railgun	Pick shot	90	0.7 rps	5	Pierces 1 target, tracer line
 Plasma	Spam / mid	18	8 rps	40	Projectiles, slight pushback
 
-Ammo Types: Ballistic, Shells, Rockets, Cells. Ammo pickups specify type; “Ammo Crate” gives split across carried.
+Ammo Types: Ballistic, Shells, Rockets, Cells. Ammo pickups specify type; "Ammo Crate" gives split across carried.
 
 ⸻
 
@@ -104,7 +109,7 @@ Ammo Types: Ballistic, Shells, Rockets, Cells. Ammo pickups specify type; “Amm
 
 Design Tenets
 	•	Triangles of conflict: Always 2–3 viable attack routes into any hotspot.
-	•	Sightline rhythm: Alternating long/short LOS with cover “islands.”
+	•	Sightline rhythm: Alternating long/short LOS with cover "islands."
 	•	Item loops: Mini-circuits that reward timing (health → armor → weapon).
 	•	Unsafe power-ups: Powerful items visible and flanked by multiple angles.
 
@@ -135,7 +140,7 @@ Spawn System
 	•	Authoritative Server (deterministic ECS where possible).
 	•	Client-side Prediction for movement; Server Reconciliation on correction.
 	•	Lag Compensation:
-	•	Hitscan (pistol/rifle/rail): server rewinds to shooter’s shot_time.
+	•	Hitscan (pistol/rifle/rail): server rewinds to shooter's shot_time.
 	•	Projectiles (rocket/plasma): simulated server-side; client shows predicted.
 	•	Tick Rate: Server 60 Hz; Client render 120 Hz if available.
 	•	Bandwidth Targets: ≤30 kbps/client typical.
@@ -209,13 +214,14 @@ Spawn Rules
 	•	Maps: Top-left mini-radar (optional), or map overlay in warmup.
 	•	Killcam: 2–4s replay from killer POV with tracers (toggleable).
 	•	Post-Match: K/D/A, damage done, item control %, heatmap.
+	•	**Mod Editor**: Full-screen overlay with code editor, file browser, hot-reload status.
 
 ⸻
 
 16) Audio Direction
 	•	Weapons: Distinct per category; ducking on hits; positional stereo cues.
-	•	Movement: Footsteps material-aware; dash “whoosh.”
-	•	Feedback: Hitmarker pips, armor break crack, headshot “ping,” quad “thrum.”
+	•	Movement: Footsteps material-aware; dash "whoosh."
+	•	Feedback: Hitmarker pips, armor break crack, headshot "ping," quad "thrum."
 
 ⸻
 
@@ -223,13 +229,15 @@ Spawn Rules
 	•	Maps: Tile-based editor; export to JSON/CSV; server loads nav + LOS.
 	•	Weapons: Data-driven (tuning via JSON); deterministic spread patterns.
 	•	VFX: GPU-cheap particles; limited lifetimes; cap concurrent emitters.
+	•	**Mods**: JavaScript files in `public/mods/`, hot-reloadable via mod API.
 
 ⸻
 
 18) Live-Ops & Progression (Lightweight)
 	•	Cosmetics only: Sprays, trails, death banners, skins.
-	•	Challenges: “Get 10 shotgun kills,” “Control Quad 3x.”
+	•	Challenges: "Get 10 shotgun kills," "Control Quad 3x."
 	•	MMR: Visible ranks optional; SBMM queue off by default in customs.
+	•	**Mod Marketplace**: Share and download community mods (future).
 
 ⸻
 
@@ -247,6 +255,7 @@ Spawn Rules
 	•	Pickups: Health Small/Big, Armor Light, Ammo Crate, Quad.
 	•	Server: Dedicated binary, 60 Hz, basic matchmaking + custom lobbies.
 	•	Cosmetics: Simple color swaps.
+	•	**Mod System**: Basic live-coding with example mods.
 
 ⸻
 
@@ -255,6 +264,7 @@ Spawn Rules
 	•	Dash/Slide tech, wall-bonk knockback.
 	•	Replay system, spectate with timeline scrub.
 	•	Workshop maps (user UGC), anti-camp director.
+	•	**Server-side mod API** for AI-generated gameplay tweaks.
 
 ⸻
 
@@ -294,6 +304,7 @@ reload=R
 interact=E
 swap=Q
 dash=LeftShift
+mod_editor=Backtick
 
 [controller]
 shoot=RT
@@ -336,6 +347,7 @@ while (running) {
 	•	Item timing: Ensure cycles are learnable (same offsets every round).
 	•	Performance: 8 players, 60 Hz server on modest VM; 144 FPS client target on mid GPU.
 	•	UX: New player tutorial: move, aim, shoot, pick up, power-up risk.
+	•	**Mod System**: Verify hot-reload works across browsers, no memory leaks.
 
 ⸻
 
@@ -343,13 +355,15 @@ while (running) {
 	•	Spawn trapping: Weighted spawns + short invuln + map LOS reducers.
 	•	Desync complaints: Aggressive reconciliation; shorter rewind window for hitscan; projectile favoring server truth.
 	•	Balance drift: Data-driven tuning, A/B queues, telemetry on item control and weapon kill shares.
+	•	**Mod abuse**: Client-side only mods in MVP; server validation for future multiplayer mods.
 
 ⸻
 
-27) What Makes It “Us”?
+27) What Makes It "Us"?
 	•	Hotline-tight controls with Doom-ish item control.
 	•	Short, violent loops; low downtime; high clarity.
 	•	No loadout grind—skill + map timing wins.
+	•	**Hackable gameplay**: AI-powered live coding turns every match into creative chaos.
 
 ⸻
 
@@ -360,5 +374,6 @@ Appendix: Quick To-Dos
 	•	Basic UI/HUD + killfeed + scoreboard.
 	•	Dedicated server deploy script + NAT traversal or relay.
 	•	Telemetry: weapon K%, item pickup %, heatmaps.
+	•	**Mod system**: Hot-reload architecture, example mods, AI integration guide.
 
 If you want, I can spin up a barebones repo layout (server/client/shared) with the ECS scaffolding, JSON configs above, and a tiny reference arena so you can jump right into playtesting.

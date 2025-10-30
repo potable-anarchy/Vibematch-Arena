@@ -12,11 +12,11 @@
 
 1. Go to https://one.dash.cloudflare.com/
 2. Click **Networks** → **Tunnels** → **Create a tunnel**
-3. Name it `deathmatch-game` → **Save**
+3. Name it `vibematch-arena` → **Save**
 4. **Copy the token** (long string starting with `eyJ...`)
 5. Configure Public Hostname:
-   - Subdomain: `deathmatch` (or your choice)
-   - Domain: (select your domain)
+   - Subdomain: `vibematch-arena`
+   - Domain: `brad-dougherty.com`
    - Service Type: **HTTP**
    - URL: `game-server:5500`
 6. Click **Save**
@@ -51,7 +51,7 @@ docker-compose logs -f
 ### 4. Play! 🎮
 
 - **Local**: http://100.104.133.109:5500
-- **Public**: https://deathmatch.yourdomain.com
+- **Public**: https://vibematch-arena.brad-dougherty.com
 
 ## 🛠️ Common Commands
 

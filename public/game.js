@@ -690,15 +690,15 @@ levelEditorButton.addEventListener("click", () => {
 });
 
 // Game mode voting buttons
-const voteDeathmatchButton = document.getElementById("voteDeathmatchButton");
+const voteVibematchButton = document.getElementById("voteVibematchButton");
 const voteVibeRoyaleButton = document.getElementById("voteVibeRoyaleButton");
 const gameModeDisplay = document.getElementById("gameModeDisplay");
 const voteCountsDisplay = document.getElementById("voteCountsDisplay");
 
-voteDeathmatchButton.addEventListener("click", () => {
+voteVibematchButton.addEventListener("click", () => {
   if (!isSpectator) {
-    socket.emit("voteGameMode", { gameMode: "deathmatch" });
-    voteDeathmatchButton.style.background = "#66ccff";
+    socket.emit("voteGameMode", { gameMode: "vibematch" });
+    voteVibematchButton.style.background = "#66ccff";
     voteVibeRoyaleButton.style.background = "";
   }
 });
@@ -707,7 +707,7 @@ voteVibeRoyaleButton.addEventListener("click", () => {
   if (!isSpectator) {
     socket.emit("voteGameMode", { gameMode: "vibe-royale" });
     voteVibeRoyaleButton.style.background = "#66ccff";
-    voteDeathmatchButton.style.background = "";
+    voteVibematchButton.style.background = "";
   }
 });
 
@@ -1048,12 +1048,12 @@ socket.on("modActivated", async (data) => {
 // Game mode voting handlers
 socket.on("voteUpdate", (data) => {
   const { votes, totalPlayers } = data;
-  voteCountsDisplay.textContent = `Votes: Deathmatch (${votes.deathmatch}) | Vibe Royale (${votes["vibe-royale"]})`;
+  voteCountsDisplay.textContent = `Votes: Vibematch (${votes.vibematch}) | Vibe Royale (${votes["vibe-royale"]})`;
 });
 
 socket.on("gameModeChanged", (data) => {
   const { gameMode } = data;
-  const displayName = gameMode === "vibe-royale" ? "Vibe Royale" : "Deathmatch";
+  const displayName = gameMode === "vibe-royale" ? "Vibe Royale" : "Vibematch";
   gameModeDisplay.textContent = `Current: ${displayName}`;
 
   // Show notification

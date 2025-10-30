@@ -5,13 +5,13 @@
 
 set -e
 
-echo "📦 Transfer Deathmatch Arena to WSL"
+echo "📦 Transfer Vibematch-Arena to WSL"
 echo "===================================="
 
 # Configuration
 WSL_IP="100.104.133.109"
 WSL_USER="${WSL_USER:-brad}"  # Change if different
-WSL_PATH="${WSL_PATH:-~/deathmatch-arena}"
+WSL_PATH="${WSL_PATH:-~/vibematch-arena}"
 
 echo ""
 echo "Configuration:"

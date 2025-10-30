@@ -10,7 +10,7 @@
 2. Navigate to **Networks** > **Tunnels**
 3. Click **Create a tunnel**
 4. Choose **Cloudflared** as the connector
-5. Name your tunnel (e.g., `deathmatch-game`)
+5. Name your tunnel (e.g., `vibematch-arena`)
 6. Click **Save tunnel**
 7. Copy the tunnel token (starts with `eyJ...`)
 
@@ -19,8 +19,8 @@
 In the Cloudflare dashboard, configure the tunnel route:
 
 - **Public Hostname:**
-  - Subdomain: `deathmatch` (or your choice)
-  - Domain: Select your domain
+  - Subdomain: `vibematch-arena`
+  - Domain: `brad-dougherty.com`
   - Path: Leave empty
   
 - **Service:**
@@ -61,7 +61,7 @@ docker-compose ps
 ## Step 5: Verify Deployment
 
 1. Check local access: `http://100.104.133.109:5500`
-2. Check public access: `https://deathmatch.yourdomain.com`
+2. Check public access: `https://vibematch-arena.brad-dougherty.com`
 
 ## Managing the Deployment
 

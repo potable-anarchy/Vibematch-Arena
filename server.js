@@ -256,7 +256,7 @@ app.get("/", (req, res) => {
 
 // System prompt for Gemini - defines how to generate mod code
 function buildSystemPrompt() {
-  return `You are an expert JavaScript game modding assistant for a 2D deathmatch game. Generate safe, working mod code based on user requests.
+  return `You are an expert JavaScript game modding assistant for a 2D arena shooter called Vibematch-Arena. Generate safe, working mod code based on user requests.
 
 ═══════════════════════════════════════════════════════════════
 EXECUTION ENVIRONMENTS
@@ -1102,7 +1102,7 @@ const gameState = {
   warmupEndTime: null, // When warmup ends (null = not in warmup)
   countdownStartTime: null, // When 5 second countdown starts (null = not counting down)
   roundActive: false, // Is the round currently active (scoring enabled)
-  gameMode: "deathmatch", // Current game mode: 'deathmatch' or 'vibe-royale'
+  gameMode: "vibematch", // Current game mode: 'vibematch' or 'vibe-royale'
   votes: new Map(), // Player votes for game mode: playerId -> gameMode
   killLeaderId: null, // ID of player with most kills (for spectator camera in Vibe Royale)
 };
@@ -2258,7 +2258,7 @@ function damagePlayer(player, damage, attackerId) {
         if (attacker) {
           attacker.kills++;
 
-          // Award credits for kill (10 in Vibe Royale, 5 in deathmatch)
+          // Award credits for kill (10 in Vibe Royale, 5 in vibematch)
           const creditsPerKill = gameState.gameMode === "vibe-royale" ? 10 : 5;
           attacker.credits += creditsPerKill;
 
@@ -2284,9 +2284,9 @@ function damagePlayer(player, damage, attackerId) {
           // Update kill leader
           updateKillLeader();
 
-          // Check if attacker reached score limit (only in deathmatch)
+          // Check if attacker reached score limit (only in vibematch)
           if (
-            gameState.gameMode === "deathmatch" &&
+            gameState.gameMode === "vibematch" &&
             attacker.kills >= GAME_CONFIG.SCORE_LIMIT
           ) {
             // Reset round after a short delay (3 seconds)
@@ -2300,7 +2300,7 @@ function damagePlayer(player, damage, attackerId) {
           if (botAttacker) {
             botAttacker.kills++;
 
-            // Award credits for kill (10 in Vibe Royale, 5 in deathmatch)
+            // Award credits for kill (10 in Vibe Royale, 5 in vibematch)
             const creditsPerKill =
               gameState.gameMode === "vibe-royale" ? 10 : 5;
             botAttacker.credits += creditsPerKill;
@@ -2311,9 +2311,9 @@ function damagePlayer(player, damage, attackerId) {
             // Update kill leader
             updateKillLeader();
 
-            // Check if bot reached score limit (only in deathmatch)
+            // Check if bot reached score limit (only in vibematch)
             if (
-              gameState.gameMode === "deathmatch" &&
+              gameState.gameMode === "vibematch" &&
               botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT
             ) {
               // Reset round after a short delay (3 seconds)
@@ -2928,7 +2928,7 @@ io.on("connection", (socket) => {
     if (!player) return; // Only players can vote, not spectators
 
     // Validate game mode
-    if (gameMode !== "deathmatch" && gameMode !== "vibe-royale") {
+    if (gameMode !== "vibematch" && gameMode !== "vibe-royale") {
       return;
     }
 
@@ -2936,7 +2936,7 @@ io.on("connection", (socket) => {
     gameState.votes.set(playerId, gameMode);
 
     // Count votes
-    const voteCounts = { deathmatch: 0, "vibe-royale": 0 };
+    const voteCounts = { vibematch: 0, "vibe-royale": 0 };
     for (const [id, mode] of gameState.votes) {
       if (gameState.players.has(id)) {
         voteCounts[mode]++;
@@ -2950,7 +2950,7 @@ io.on("connection", (socket) => {
     });
 
     // If majority votes for a different mode, switch modes
-    const totalVotes = voteCounts.deathmatch + voteCounts["vibe-royale"];
+    const totalVotes = voteCounts.vibematch + voteCounts["vibe-royale"];
     const currentMode = gameState.gameMode;
 
     if (
@@ -2959,10 +2959,10 @@ io.on("connection", (socket) => {
     ) {
       switchGameMode("vibe-royale");
     } else if (
-      voteCounts.deathmatch > gameState.players.size / 2 &&
-      currentMode !== "deathmatch"
+      voteCounts.vibematch > gameState.players.size / 2 &&
+      currentMode !== "vibematch"
     ) {
-      switchGameMode("deathmatch");
+      switchGameMode("vibematch");
     }
   });
 });

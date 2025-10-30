@@ -1,6 +1,20 @@
-# Vibematch Arena
+# Vibematch-Arena
 
-A fast-paced, top-down multiplayer shooter inspired by Hotline Miami and classic arena shooters like Doom.
+A fast-paced, top-down multiplayer shooter with one massive twist: **players can hack the game with AI to add custom code that modifies gameplay in real-time.**
+
+At the surface, it's a classic arena shooter inspired by Hotline Miami and Doom. But beneath that lies a powerful live-coding system where anyone can write or generate JavaScript mods that inject custom logic into the game loop, creating temporary gameplay tweaks, visual effects, new mechanics, and more—all without stopping the game.
+
+## The Twist: AI-Powered Game Modding
+
+This isn't just another shooter. **Vibematch-Arena lets you hack the game while you play:**
+
+- 🤖 **AI-Generated Mods** - Ask an AI assistant to generate custom gameplay code
+- ⚡ **Hot-Reload System** - Press Ctrl+Enter to inject code instantly, no restart needed
+- 🎮 **Live Coding** - Modify physics, add visual effects, create new mechanics on the fly
+- 🔓 **Open Game Loop** - Direct access to game state, rendering, and event systems
+- 🎨 **Unlimited Creativity** - From rainbow particle trails to custom damage systems
+
+**Example:** Want floating damage numbers? Faster movement? Screen shake on kills? Just write (or ask AI to write) a few lines of JavaScript, hot-reload it, and watch it work instantly.
 
 ## Features
 
@@ -24,6 +38,8 @@ A fast-paced, top-down multiplayer shooter inspired by Hotline Miami and classic
 - **Mouse** - Aim
 - **Left Click** - Shoot
 - **R** - Reload
+- **`** (Backtick) - Open mod editor
+- **Ctrl+Enter** - Hot-reload mod code
 
 ## Running Locally
 
@@ -152,6 +168,19 @@ All mods are stored in `public/mods/`:
 - `example-damage-numbers.js` - Floating damage numbers
 - Add your own `.js` files here!
 
+### Creating Mods with AI
+
+The easiest way to create mods is to ask an AI assistant (like Claude Code):
+
+```
+"Create a mod that makes players leave a rainbow trail"
+"Add floating damage numbers above enemies when they're hit"
+"Make the screen shake when I get a kill"
+"Add a speedometer showing my current velocity"
+```
+
+The AI can read the mod API documentation and generate working code that you can hot-reload instantly!
+
 ### Disabling Mods
 
 **Option 1**: Add `?mods=false` to the URL
@@ -188,15 +217,12 @@ Comprehensive documentation is available in the `docs/` directory:
 - Additional weapons (rocket launcher, railgun, plasma)
 - More maps with different layouts
 - Power-ups (Quad Damage, Haste, Shield)
-- Team Deathmatch mode
+- Team Vibematch mode
 - Custom lobbies and matchmaking
 - Cosmetics and player customization
-- Server-side mod support
+- Server-side mod support with AI generation API
+- Persistent mod marketplace where players can share creations
 
 ## License
 
 MIT
-# Test deployment Sat Oct 25 17:41:38 PDT 2025
-# Webhook test 2 Sat Oct 25 17:51:08 PDT 2025
-# Final deployment test Sat Oct 25 17:54:47 PDT 2025
-# Deployment test - checking connection behavior Sat Oct 25 18:08:20 PDT 2025

@@ -6,13 +6,13 @@
 ## Test Summary
 
 ### 1. Docker Build Test ✅
-- **Command:** `docker build -t deathmatch-game:test .`
+- **Command:** `docker build -t vibematch-arena:test .`
 - **Result:** SUCCESS
 - **Build Time:** ~2.3 seconds
 - **Image Size:** Optimized with Alpine Linux
 
 ### 2. Container Run Test ✅
-- **Command:** `docker run -d -p 5501:5500 deathmatch-game:test`
+- **Command:** `docker run -d -p 5501:5500 vibematch-arena:test`
 - **Result:** SUCCESS
 - **Container ID:** bcf0a72163d7b4f5a5f031e73c3ee4dd9bef0d0698a8dce1db219f4efeabb733
 - **Logs:** Server started successfully on port 5500

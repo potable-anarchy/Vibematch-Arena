@@ -82,19 +82,43 @@
 
                     <div class="game-menu-section">
                         <h3>Game Mode</h3>
-                        <div id="gameModeDisplay" style="margin-bottom: 10px; color: #66ccff; font-weight: bold;">
-                            Current: Deathmatch
+                        <div
+                            id="gameModeDisplay"
+                            style="
+                                margin-bottom: 10px;
+                                color: #66ccff;
+                                font-weight: bold;
+                            "
+                        >
+                            Current: Vibematch
                         </div>
-                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                            <button id="voteDeathmatchButton" class="menu-btn" style="flex: 1;">
-                                Vote Deathmatch
+                        <div
+                            style="
+                                display: flex;
+                                gap: 10px;
+                                margin-bottom: 10px;
+                            "
+                        >
+                            <button
+                                id="voteVibematchButton"
+                                class="menu-btn"
+                                style="flex: 1"
+                            >
+                                Vote Vibematch
                             </button>
-                            <button id="voteVibeRoyaleButton" class="menu-btn" style="flex: 1;">
+                            <button
+                                id="voteVibeRoyaleButton"
+                                class="menu-btn"
+                                style="flex: 1"
+                            >
                                 Vote Vibe Royale
                             </button>
                         </div>
-                        <div id="voteCountsDisplay" style="font-size: 12px; color: #888;">
-                            Votes: Deathmatch (0) | Vibe Royale (0)
+                        <div
+                            id="voteCountsDisplay"
+                            style="font-size: 12px; color: #888"
+                        >
+                            Votes: Vibematch (0) | Vibe Royale (0)
                         </div>
                     </div>
 
@@ -112,9 +136,14 @@
 
                     <div class="game-menu-section">
                         <button id="debugHudButton" class="menu-btn">
-                            <span id="debugHudButtonText">Enable Debug HUD</span>
+                            <span id="debugHudButtonText"
+                                >Enable Debug HUD</span
+                            >
                         </button>
-                        <div class="menu-hint" style="font-size: 11px; margin-top: 5px;">
+                        <div
+                            class="menu-hint"
+                            style="font-size: 11px; margin-top: 5px"
+                        >
                             Monitors FPS, memory leaks, and performance
                         </div>
                     </div>
@@ -246,22 +275,46 @@
                     <h3>Tools</h3>
                     <div class="tool-section">
                         <h4>Mode</h4>
-                        <button id="toolWall" class="tool-btn active" data-tool="wall">
+                        <button
+                            id="toolWall"
+                            class="tool-btn active"
+                            data-tool="wall"
+                        >
                             Wall
                         </button>
-                        <button id="toolCrate" class="tool-btn" data-tool="crate">
+                        <button
+                            id="toolCrate"
+                            class="tool-btn"
+                            data-tool="crate"
+                        >
                             Crate
                         </button>
-                        <button id="toolSpawn" class="tool-btn" data-tool="spawn">
+                        <button
+                            id="toolSpawn"
+                            class="tool-btn"
+                            data-tool="spawn"
+                        >
                             Spawn Point
                         </button>
-                        <button id="toolPickup" class="tool-btn" data-tool="pickup">
+                        <button
+                            id="toolPickup"
+                            class="tool-btn"
+                            data-tool="pickup"
+                        >
                             Pickup
                         </button>
-                        <button id="toolWaypoint" class="tool-btn" data-tool="waypoint">
+                        <button
+                            id="toolWaypoint"
+                            class="tool-btn"
+                            data-tool="waypoint"
+                        >
                             Waypoint
                         </button>
-                        <button id="toolDelete" class="tool-btn" data-tool="delete">
+                        <button
+                            id="toolDelete"
+                            class="tool-btn"
+                            data-tool="delete"
+                        >
                             Delete
                         </button>
                     </div>
@@ -313,7 +366,10 @@
                 <div class="level-editor-canvas-container">
                     <canvas id="editorCanvas"></canvas>
                     <div class="editor-help">
-                        <p>Click and drag to create walls | Click to place objects | Right-click to delete</p>
+                        <p>
+                            Click and drag to create walls | Click to place
+                            objects | Right-click to delete
+                        </p>
                         <p>Camera: Arrow keys or WASD | Zoom: Mouse wheel</p>
                     </div>
                 </div>

@@ -68,7 +68,7 @@ The Docker Compose setup is **fully functional** and ready for WSL deployment.
 2. **SSH to WSL and configure:**
    ```bash
    ssh brad@100.104.133.109
-   cd ~/deathmatch-arena
+   cd ~/vibematch-arena
    cp .env.example .env
    nano .env
    ```
