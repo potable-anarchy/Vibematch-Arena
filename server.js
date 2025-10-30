@@ -1102,7 +1102,7 @@ const gameState = {
   warmupEndTime: null, // When warmup ends (null = not in warmup)
   countdownStartTime: null, // When 5 second countdown starts (null = not counting down)
   roundActive: false, // Is the round currently active (scoring enabled)
-  gameMode: "vibematch", // Current game mode: 'vibematch' or 'vibe-royale'
+  gameMode: "vibe-royale", // Current game mode: 'vibematch' or 'vibe-royale'
   votes: new Map(), // Player votes for game mode: playerId -> gameMode
   killLeaderId: null, // ID of player with most kills (for spectator camera in Vibe Royale)
 };
