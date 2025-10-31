@@ -20,6 +20,8 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          timeout: 60s
+          command_timeout: 30m
           script: |
             # Navigate to project directory
             cd ~/vibematch-arena || mkdir -p ~/vibematch-arena
