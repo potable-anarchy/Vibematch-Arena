@@ -2360,9 +2360,8 @@ function damagePlayer(player, damage, attackerId) {
           // Update kill leader
           updateKillLeader();
 
-          // Check if attacker reached score limit (only in vibematch)
+          // Check if attacker reached score limit
           if (
-            gameState.gameMode === "vibematch" &&
             attacker.kills >= GAME_CONFIG.SCORE_LIMIT
           ) {
             // Reset round after a short delay (3 seconds)
@@ -2387,9 +2386,8 @@ function damagePlayer(player, damage, attackerId) {
             // Update kill leader
             updateKillLeader();
 
-            // Check if bot reached score limit (only in vibematch)
+            // Check if bot reached score limit
             if (
-              gameState.gameMode === "vibematch" &&
               botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT
             ) {
               // Reset round after a short delay (3 seconds)
