@@ -1357,11 +1357,13 @@ const CRATES = [
 ];
 
 // Spawn points for players (safe from walls)
+// Keep spawn points well within bounds: PLAYER_RADIUS (20) to WORLD_WIDTH - PLAYER_RADIUS (1980)
+// Using 100-1900 range provides good clearance from perimeter walls
 const SPAWN_POINTS = [
   { x: 100, y: 100 }, // Top-left open area
-  { x: 1900, y: 100 }, // Top-right open area
-  { x: 100, y: 1900 }, // Bottom-left open area
-  { x: 1900, y: 1900 }, // Bottom-right open area
+  { x: 1850, y: 100 }, // Top-right open area (moved from 1900 to 1850)
+  { x: 100, y: 1850 }, // Bottom-left open area (moved from 1900 to 1850)
+  { x: 1850, y: 1850 }, // Bottom-right open area (moved from 1900 to 1850)
   { x: 450, y: 1000 }, // Left center (away from corridors)
   { x: 1550, y: 1000 }, // Right center (away from corridors)
   { x: 1000, y: 450 }, // Top center (away from center structure)
