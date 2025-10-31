@@ -292,6 +292,20 @@ app.get("/api/metrics/aggregated", (req, res) => {
 });
 
 // Middleware
+// CORS headers for all requests
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept",
+  );
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Serve static files with aggressive caching for assets
 app.use(
   express.static(join(__dirname, "public"), {
