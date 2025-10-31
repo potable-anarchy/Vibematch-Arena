@@ -1,0 +1,54 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            # Navigate to project directory
+            cd ~/vibematch-arena || mkdir -p ~/vibematch-arena
+
+            # Sync files from GitHub (using temp directory)
+            TEMP_DIR=$(mktemp -d)
+            cd $TEMP_DIR
+            git clone --depth 1 https://github.com/potable-anarchy/Vibematch-Arena.git .
+            rsync -av --exclude='.git' --exclude='node_modules' ./ ~/vibematch-arena/
+            rm -rf $TEMP_DIR
+
+            # Build and deploy
+            cd ~/vibematch-arena
+
+            echo "🏗️  Building Docker image..."
+            docker build -t vibematch-arena:latest .
+
+            echo "🛑 Stopping old container..."
+            docker stop vibematch-arena-app 2>/dev/null || true
+            docker rm vibematch-arena-app 2>/dev/null || true
+
+            echo "▶️  Starting new container..."
+            docker run -d \
+              --name vibematch-arena-app \
+              --restart unless-stopped \
+              -p 5500:5500 \
+              -e NODE_ENV=production \
+              -e PORT=5500 \
+              vibematch-arena:latest
+
+            echo "✅ Deployment complete!"
+            docker ps --filter name=vibematch-arena-app
