@@ -3446,8 +3446,7 @@ function gameLoop() {
         continue;
       }
 
-      // Apply physics - gravity and velocity
-      grenade.vy += GRENADE_CONFIG.GRAVITY * dt; // Apply gravity
+      // Apply physics - velocity only (no gravity in top-down view)
       grenade.x += grenade.vx * dt;
       grenade.y += grenade.vy * dt;
 
