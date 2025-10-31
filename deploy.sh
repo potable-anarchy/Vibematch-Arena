@@ -1,71 +1,107 @@
 #!/bin/bash
 
-# Deployment script for Vibematch-Arena on WSL with Cloudflare Tunnel
+# Vibematch-Arena Deployment Script
+# Deploys the game to a remote server running Docker
 
 set -e
 
-echo "🎮 Vibematch-Arena - Deployment Script"
-echo "========================================"
+# Configuration
+REMOTE_HOST="100.120.77.39"
+REMOTE_USER="${REMOTE_USER:-root}"
+REMOTE_DIR="${REMOTE_DIR:-~/vibematch-arena}"
+PROJECT_NAME="vibematch-arena"
+CONTAINER_NAME="vibematch-arena-app"
 
-# Check if .env exists
-if [ ! -f .env ]; then
-    echo "❌ .env file not found!"
-    echo "📝 Creating .env from template..."
-    cp .env.example .env
+echo "🚀 Starting deployment to ${REMOTE_HOST}..."
+
+# Check SSH connection
+echo "📡 Testing SSH connection..."
+if ! ssh -o ConnectTimeout=5 "${REMOTE_USER}@${REMOTE_HOST}" "echo 'SSH connection successful'"; then
+    echo "❌ Failed to connect to ${REMOTE_HOST}"
+    echo "Please ensure:"
+    echo "  1. SSH is enabled on the remote server"
+    echo "  2. You have SSH key authentication set up"
+    echo "  3. The IP address is correct"
+    exit 1
+fi
+
+echo "✅ SSH connection successful"
+
+# Create remote directory
+echo "📁 Creating remote directory..."
+ssh "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p ${REMOTE_DIR}"
+
+# Sync project files
+echo "📦 Syncing project files..."
+rsync -avz --progress \
+    --exclude 'node_modules' \
+    --exclude '.git' \
+    --exclude '.env' \
+    --exclude '*.log' \
+    --exclude '.DS_Store' \
+    ./ "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
+
+echo "✅ Files synced successfully"
+
+# Deploy on remote server
+echo "🐳 Building and starting Docker container..."
+ssh "${REMOTE_USER}@${REMOTE_HOST}" "cd ${REMOTE_DIR} && bash -s" << 'ENDSSH'
+    set -e
+
+    # Check if Docker is installed
+    if ! command -v docker &> /dev/null; then
+        echo "❌ Docker is not installed on the remote server"
+        echo "Please install Docker first: https://docs.docker.com/engine/install/"
+        exit 1
+    fi
+
+    # Check if docker-compose is available
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        echo "❌ Docker Compose is not installed on the remote server"
+        echo "Please install Docker Compose first"
+        exit 1
+    fi
+
+    # Stop existing container if running
+    echo "🛑 Stopping existing container (if any)..."
+    docker stop vibematch-arena-app 2>/dev/null || true
+    docker rm vibematch-arena-app 2>/dev/null || true
+
+    # Build the Docker image
+    echo "🏗️  Building Docker image..."
+    docker build -t vibematch-arena:latest .
+
+    # Run the container
+    echo "▶️  Starting container..."
+    docker run -d \
+        --name vibematch-arena-app \
+        --restart unless-stopped \
+        -p 5500:5500 \
+        -e NODE_ENV=production \
+        -e PORT=5500 \
+        vibematch-arena:latest
+
+    echo "✅ Container started successfully"
+
+    # Show container status
     echo ""
-    echo "⚠️  Please edit .env and add your TUNNEL_TOKEN"
-    echo "   Get your token from: https://one.dash.cloudflare.com/"
-    echo "   Then run this script again."
-    exit 1
-fi
+    echo "📊 Container Status:"
+    docker ps --filter "name=vibematch-arena-app"
 
-# Check if TUNNEL_TOKEN is set
-source .env
-if [ -z "$TUNNEL_TOKEN" ] || [ "$TUNNEL_TOKEN" = "your_tunnel_token_here" ]; then
-    echo "❌ TUNNEL_TOKEN not set in .env file!"
-    echo "   Get your token from: https://one.dash.cloudflare.com/"
-    exit 1
-fi
-
-echo "✅ Environment configured"
-echo ""
-
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo "❌ Docker is not running!"
-    echo "   Start Docker and try again."
-    exit 1
-fi
-
-echo "✅ Docker is running"
-echo ""
-
-# Build and deploy
-echo "🔨 Building and deploying containers..."
-docker-compose up -d --build
-
-echo ""
-echo "⏳ Waiting for services to start..."
-sleep 5
-
-# Show status
-echo ""
-echo "📊 Service Status:"
-docker-compose ps
-
-echo ""
-echo "📋 Recent Logs:"
-docker-compose logs --tail=20
+    echo ""
+    echo "📝 Recent logs:"
+    docker logs vibematch-arena-app --tail 20
+ENDSSH
 
 echo ""
 echo "✅ Deployment complete!"
 echo ""
-echo "🌐 Access your game:"
-echo "   Local:  http://100.104.133.109:5500"
-echo "   Public: https://vibematch-arena.brad-dougherty.com"
+echo "🎮 Game Server Info:"
+echo "  URL: http://${REMOTE_HOST}:5500"
+echo "  Status: docker logs ${CONTAINER_NAME}"
 echo ""
-echo "📝 Useful commands:"
-echo "   View logs:    docker-compose logs -f"
-echo "   Stop:         docker-compose down"
-echo "   Restart:      docker-compose restart"
-echo "   Rebuild:      docker-compose up -d --build"
+echo "📋 Useful commands:"
+echo "  View logs:    ssh ${REMOTE_USER}@${REMOTE_HOST} 'docker logs -f ${CONTAINER_NAME}'"
+echo "  Restart:      ssh ${REMOTE_USER}@${REMOTE_HOST} 'docker restart ${CONTAINER_NAME}'"
+echo "  Stop:         ssh ${REMOTE_USER}@${REMOTE_HOST} 'docker stop ${CONTAINER_NAME}'"
+echo "  Shell access: ssh ${REMOTE_USER}@${REMOTE_HOST} 'docker exec -it ${CONTAINER_NAME} sh'"

@@ -1,0 +1,7 @@
+tunnel: vibematch-arena
+credentials-file: /home/brad/.cloudflared/vibematch-arena.json
+
+ingress:
+  - hostname: vibematch-arena.brad-dougherty.com
+    service: http://localhost:5500
+  - service: http_status:404
