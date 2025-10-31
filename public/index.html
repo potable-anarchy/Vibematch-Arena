@@ -53,20 +53,26 @@
                 <span id="respawnTimer"></span>
             </div>
 
-            <!-- In-game menu (ESC to toggle) -->
+            <!-- In-game menu (M to toggle) -->
             <div id="gameMenu" class="game-menu" style="display: none">
                 <div class="game-menu-content">
                     <h2>GAME MENU</h2>
                     <div class="menu-hint">Press M to close</div>
 
-                    <!-- Resume Game button -->
+                    <!-- Game Controls -->
                     <div class="game-menu-section">
                         <button id="resumeGameButton" class="menu-btn">
                             Resume Game
                         </button>
                     </div>
 
-                    <!-- Single tab content - no tab navigation needed -->
+                    <div class="game-menu-section">
+                        <button id="spectateButton" class="menu-btn">
+                            Enter Spectate Mode
+                        </button>
+                    </div>
+
+                    <!-- Player Settings -->
                     <div class="game-menu-section">
                         <h3>Player Name</h3>
                         <input
@@ -80,6 +86,7 @@
                         </button>
                     </div>
 
+                    <!-- Game Mode Voting -->
                     <div class="game-menu-section">
                         <h3>Game Mode</h3>
                         <div
@@ -122,12 +129,7 @@
                         </div>
                     </div>
 
-                    <div class="game-menu-section">
-                        <button id="spectateButton" class="menu-btn">
-                            Enter Spectate Mode
-                        </button>
-                    </div>
-
+                    <!-- Options -->
                     <div class="game-menu-section">
                         <button id="controlsButton" class="menu-btn">
                             Controls & How to Play
@@ -140,12 +142,6 @@
                                 >Enable Debug HUD</span
                             >
                         </button>
-                        <div
-                            class="menu-hint"
-                            style="font-size: 11px; margin-top: 5px"
-                        >
-                            Monitors FPS, memory leaks, and performance
-                        </div>
                     </div>
 
                     <div class="game-menu-section">
