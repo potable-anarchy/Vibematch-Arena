@@ -1139,7 +1139,11 @@ function updateHUD() {
   // Respawn (only show for own player)
   if (displayPlayer.id === playerId && displayPlayer.health <= 0) {
     respawnMessage.style.display = "block";
-    respawnTimer.textContent = "Respawning...";
+    if (gameState.gameMode === "vibe-royale") {
+      respawnTimer.textContent = "You will respawn next round";
+    } else {
+      respawnTimer.textContent = "Respawning...";
+    }
   }
 }
 

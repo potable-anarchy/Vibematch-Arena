@@ -437,27 +437,27 @@ body {
 /* Respawn Message */
 .respawn-message {
     position: fixed;
-    top: 50%;
+    top: 20px;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     text-align: center;
-    background: rgba(20, 20, 30, 0.95);
-    border: 3px solid #ff3366;
-    padding: 40px 60px;
-    border-radius: 10px;
+    background: rgba(20, 20, 30, 0.9);
+    border: 2px solid #ff3366;
+    padding: 12px 24px;
+    border-radius: 5px;
     pointer-events: none;
 }
 
 .respawn-message p {
-    font-size: 48px;
+    font-size: 18px;
     font-weight: bold;
     color: #ff3366;
-    text-shadow: 0 0 10px #ff3366;
-    margin-bottom: 20px;
+    text-shadow: 0 0 5px #ff3366;
+    margin-bottom: 5px;
 }
 
 .respawn-message span {
-    font-size: 24px;
+    font-size: 14px;
     color: #66ccff;
 }
 
