@@ -2147,8 +2147,9 @@ function damagePlayer(player, damage, attackerId) {
           // Update kill leader
           updateKillLeader();
 
-          // Check if attacker reached score limit
+          // Check if attacker reached score limit (only in vibematch mode)
           if (
+            gameState.gameMode === "vibematch" &&
             attacker.kills >= GAME_CONFIG.SCORE_LIMIT
           ) {
             // Reset round after a short delay (3 seconds)
@@ -2173,8 +2174,9 @@ function damagePlayer(player, damage, attackerId) {
             // Update kill leader
             updateKillLeader();
 
-            // Check if bot reached score limit
+            // Check if bot reached score limit (only in vibematch mode)
             if (
+              gameState.gameMode === "vibematch" &&
               botAttacker.kills >= GAME_CONFIG.SCORE_LIMIT
             ) {
               // Reset round after a short delay (3 seconds)
@@ -4398,6 +4400,29 @@ function gameLoop() {
             });
           }
         }
+      }
+    }
+
+    // Check Vibe Royale win condition: only one player/bot remaining
+    if (gameState.gameMode === "vibe-royale" && gameState.roundActive) {
+      const alivePlayers = Array.from(gameState.players.values()).filter(
+        (p) => p.health > 0,
+      );
+      const aliveBots = Array.from(gameState.bots.values()).filter(
+        (b) => b.health > 0,
+      );
+      const totalAlive = alivePlayers.length + aliveBots.length;
+
+      // If only one combatant remains, they win
+      if (totalAlive === 1) {
+        const winner = alivePlayers.length === 1 ? alivePlayers[0] : aliveBots[0];
+
+        console.log(`🏆 VIBE ROYALE WINNER: ${winner.name} (last survivor)`);
+
+        // End the round after a short delay (3 seconds)
+        setTimeout(() => {
+          resetRound(winner.id, winner.name);
+        }, 3000);
       }
     }
 
