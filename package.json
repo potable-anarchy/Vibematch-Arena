@@ -22,7 +22,6 @@
     "better-sqlite3": "^12.4.1",
     "dotenv": "^16.6.1",
     "express": "^4.18.2",
-    "redis": "^5.9.0",
     "socket.io": "^4.6.1",
     "socket.io-client": "^4.8.1"
   },

@@ -5,7 +5,6 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { promises as fs } from "fs";
 import "dotenv/config";
-import { createClient } from "redis";
 import performanceMonitor from "./performance-monitor.js";
 import {
   saveMod,
@@ -22,34 +21,6 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// ====== REDIS SETUP FOR SHARED STATE ======
-
-const redisClient = createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379",
-  socket: {
-    reconnectStrategy: (retries) => {
-      if (retries > 10) {
-        console.error("❌ Redis reconnection failed after 10 attempts");
-        return new Error("Redis reconnection limit exceeded");
-      }
-      return Math.min(retries * 100, 3000); // Exponential backoff up to 3s
-    },
-  },
-});
-
-redisClient.on("error", (err) =>
-  console.error("❌ Redis Client Error:", err.message),
-);
-redisClient.on("connect", () => console.log("✅ Redis connected"));
-redisClient.on("ready", () => console.log("✅ Redis ready"));
-redisClient.on("reconnecting", () => console.log("🔄 Redis reconnecting..."));
-
-// Connect to Redis (non-blocking)
-console.log("🔄 Connecting to Redis...");
-redisClient.connect().catch((err) => {
-  console.error("❌ Failed to connect to Redis:", err.message);
-  console.log("⚠️  Server will continue without Redis state persistence");
-});
 
 // ====== CRASH PREVENTION & ERROR HANDLING ======
 
@@ -79,10 +50,6 @@ async function gracefulShutdown(signal) {
     countdown: 5,
   });
 
-  // Final sync to Redis before shutdown
-  console.log("💾 Performing final state sync to Redis...");
-  await syncStateToRedis();
-  console.log("✅ Final state saved to Redis");
 
   // Give players time to receive the message
   await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -97,9 +64,6 @@ async function gracefulShutdown(signal) {
     console.log("✅ Socket.io server closed");
   });
 
-  // Disconnect from Redis
-  await redisClient.quit();
-  console.log("✅ Redis disconnected");
 
   process.exit(0);
 
@@ -1182,183 +1146,6 @@ const gameState = {
   votes: new Map(), // Player votes for game mode: playerId -> gameMode
   killLeaderId: null, // ID of player with most kills (for spectator camera in Vibe Royale)
 };
-
-// ====== REDIS STATE MANAGEMENT ======
-
-const REDIS_KEYS = {
-  GAME_STATE: "vibematch:gamestate",
-  PLAYERS: "vibematch:players",
-  BOTS: "vibematch:bots",
-  METADATA: "vibematch:metadata",
-};
-
-// Sync game state to Redis (called every tick)
-async function syncStateToRedis() {
-  // Skip if Redis not ready
-  if (!redisClient.isReady) {
-    return;
-  }
-
-  try {
-    // Only sync essential state - not projectiles/sounds (too volatile)
-    const state = {
-      players: Array.from(gameState.players.entries()).map(([id, p]) => ({
-        id,
-        name: p.name,
-        x: p.x,
-        y: p.y,
-        health: p.health,
-        armor: p.armor,
-        kills: p.kills,
-        deaths: p.deaths,
-        weapon: p.weapon,
-        ammo: p.ammo,
-        credits: p.credits,
-        activeMods: p.activeMods,
-      })),
-      bots: Array.from(gameState.bots.entries()).map(([id, b]) => ({
-        id,
-        name: b.name,
-        x: b.x,
-        y: b.y,
-        health: b.health,
-        armor: b.armor,
-        kills: b.kills,
-        deaths: b.deaths,
-        weapon: b.weapon,
-        ammo: b.ammo,
-        credits: b.credits,
-        activeMods: b.activeMods,
-      })),
-      metadata: {
-        nextProjectileId: gameState.nextProjectileId,
-        nextPickupId: gameState.nextPickupId,
-        nextBotId: gameState.nextBotId,
-        warmupEndTime: gameState.warmupEndTime,
-        countdownStartTime: gameState.countdownStartTime,
-        roundActive: gameState.roundActive,
-        timestamp: Date.now(),
-      },
-    };
-
-    // Use pipeline for atomic updates
-    const pipeline = redisClient.multi();
-    pipeline.set(REDIS_KEYS.PLAYERS, JSON.stringify(state.players));
-    pipeline.set(REDIS_KEYS.BOTS, JSON.stringify(state.bots));
-    pipeline.set(REDIS_KEYS.METADATA, JSON.stringify(state.metadata));
-    pipeline.expire(REDIS_KEYS.PLAYERS, 300); // 5 min TTL
-    pipeline.expire(REDIS_KEYS.BOTS, 300);
-    pipeline.expire(REDIS_KEYS.METADATA, 300);
-    await pipeline.exec();
-  } catch (error) {
-    console.error("❌ Error syncing state to Redis:", error.message);
-  }
-}
-
-// Restore game state from Redis on startup
-async function restoreStateFromRedis() {
-  // Wait for Redis to be ready (up to 5 seconds)
-  if (!redisClient.isReady) {
-    console.log("⏳ Waiting for Redis to be ready...");
-    const startTime = Date.now();
-    while (!redisClient.isReady && Date.now() - startTime < 5000) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    if (!redisClient.isReady) {
-      console.log("⚠️  Redis not ready after 5s - skipping state restore");
-      return false;
-    }
-  }
-
-  try {
-    console.log("🔄 Attempting to restore game state from Redis...");
-
-    const [playersData, botsData, metadataData] = await Promise.all([
-      redisClient.get(REDIS_KEYS.PLAYERS),
-      redisClient.get(REDIS_KEYS.BOTS),
-      redisClient.get(REDIS_KEYS.METADATA),
-    ]);
-
-    if (!playersData && !botsData && !metadataData) {
-      console.log("ℹ️  No previous state found in Redis - starting fresh");
-      return false;
-    }
-
-    // Restore players
-    if (playersData) {
-      const players = JSON.parse(playersData);
-      players.forEach((p) => {
-        gameState.players.set(p.id, {
-          ...p,
-          socket: null, // Socket will reconnect
-          vx: 0,
-          vy: 0,
-          angle: 0,
-          isDead: false,
-          respawnTimer: null,
-          spawnInvulnUntil: null,
-          lastShotTime: 0,
-          inventory: [],
-          modExecutionContext: {},
-        });
-      });
-      console.log(`✅ Restored ${players.length} players from Redis`);
-    }
-
-    // Restore bots
-    if (botsData) {
-      const bots = JSON.parse(botsData);
-      bots.forEach((b) => {
-        const now = Date.now();
-        gameState.bots.set(b.id, {
-          ...b,
-          isBot: true,
-          vx: 0,
-          vy: 0,
-          aimAngle: 0,
-          maxAmmo: WEAPONS[b.weapon || "pistol"].mag,
-          lastShot: 0,
-          reloading: false,
-          reloadFinish: 0,
-          invulnerable: now + GAME_CONFIG.SPAWN_INVULN_TIME,
-          respawnAt: null,
-          lastFootstepSound: 0,
-          // Bot AI state
-          target: null,
-          lastHeardSound: null,
-          wanderAngle: Math.random() * Math.PI * 2,
-          wanderTimer: now + Math.random() * 3000,
-          thinkTimer: now,
-          // Position tracking
-          areaCheckTimer: now,
-          lastAreaCheckPos: { x: b.x, y: b.y },
-          totalDistanceMoved: 0,
-          modExecutionContext: {},
-        });
-      });
-      console.log(`✅ Restored ${bots.length} bots from Redis`);
-    }
-
-    // Restore metadata
-    if (metadataData) {
-      const metadata = JSON.parse(metadataData);
-      gameState.nextProjectileId = metadata.nextProjectileId || 0;
-      gameState.nextPickupId = metadata.nextPickupId || 0;
-      gameState.nextBotId = metadata.nextBotId || 0;
-      gameState.warmupEndTime = metadata.warmupEndTime;
-      gameState.countdownStartTime = metadata.countdownStartTime;
-      gameState.roundActive = metadata.roundActive || false;
-      console.log(
-        `✅ Restored game metadata from Redis (age: ${Date.now() - metadata.timestamp}ms)`,
-      );
-    }
-
-    return true;
-  } catch (error) {
-    console.error("❌ Error restoring state from Redis:", error);
-    return false;
-  }
-}
 
 // Game constants
 const GAME_CONFIG = {
@@ -4706,13 +4493,6 @@ function gameLoop() {
     });
     performanceMonitor.updateConnectionCount(io.engine.clientsCount);
 
-    // Sync state to Redis every second (60 ticks)
-    if (Math.floor(now / 1000) !== Math.floor((now - 16.67) / 1000)) {
-      // Non-blocking async call
-      syncStateToRedis().catch((err) =>
-        console.error("❌ Redis sync failed:", err.message),
-      );
-    }
 
     // Record tick time
     const tickEndTime = Date.now();
@@ -4741,14 +4521,9 @@ setInterval(() => {
 
 setInterval(gameLoop, TICK_INTERVAL);
 
-// Restore state from Redis (non-blocking)
-restoreStateFromRedis().catch((err) =>
-  console.error("❌ Failed to restore state from Redis:", err.message),
-);
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Open http://localhost:${PORT} in your browser`);
   console.log(`🤖 ${gameState.bots.size} bots ready`);
-  console.log(`👥 ${gameState.players.size} players restored from Redis`);
 });
