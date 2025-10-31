@@ -58,7 +58,7 @@
       "name": "Mod Shop",
       "file": "mod-shop.js",
       "description": "Press B to open the mod shop and purchase mods with credits",
-      "enabled": true
+      "enabled": false
     },
     {
       "name": "Performance HUD",
