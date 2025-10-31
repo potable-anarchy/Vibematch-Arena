@@ -18,7 +18,7 @@ COPY . .
 RUN cd public/assets && \
     unzip -o Top_Down_Survivor.zip && \
     unzip -o topdown-shooter.zip && \
-    unzip -o gore-assets.zip && \
+    (unzip -o gore-assets.zip || echo "gore-assets.zip skipped") && \
     rm -f *.zip
 
 # Expose port
