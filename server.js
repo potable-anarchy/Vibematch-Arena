@@ -172,6 +172,68 @@ app.get("/health", (req, res) => {
   performanceMonitor.endRequest(requestId);
 });
 
+// GitHub webhook endpoint for auto-deployment
+app.post("/api/deploy", express.json(), async (req, res) => {
+  const WEBHOOK_SECRET =
+    process.env.WEBHOOK_SECRET || "vibematch-webhook-secret-2025";
+
+  // Verify GitHub signature
+  const signature = req.headers["x-hub-signature-256"];
+  if (signature) {
+    const hmac = crypto.createHmac("sha256", WEBHOOK_SECRET);
+    const digest =
+      "sha256=" + hmac.update(JSON.stringify(req.body)).digest("hex");
+
+    if (signature !== digest) {
+      console.log("❌ Invalid webhook signature");
+      return res.status(401).json({ error: "Invalid signature" });
+    }
+  }
+
+  const event = req.headers["x-github-event"];
+  const payload = req.body;
+
+  console.log(`📨 Webhook received: ${event} on ${payload.ref}`);
+
+  // Only deploy on push to main
+  if (event !== "push" || payload.ref !== "refs/heads/main") {
+    return res.json({ message: "Event ignored" });
+  }
+
+  // Respond immediately
+  res.json({ message: "Deployment triggered" });
+
+  // Trigger deployment asynchronously
+  console.log("🚀 Starting deployment...");
+
+  try {
+    const { exec } = await import("child_process");
+    const { promisify } = await import("util");
+    const execAsync = promisify(exec);
+
+    // Graceful shutdown notification
+    io.emit("serverShutdown", {
+      message:
+        "Server updating with latest changes. Reconnecting in 30 seconds...",
+      countdown: 30,
+    });
+
+    // Wait a bit for message to be sent
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Run deployment script
+    console.log("🔄 Running deployment script...");
+    execAsync("/home/brad/vibematch-arena/deploy-update.sh").catch((err) => {
+      console.error("❌ Deployment script failed:", err);
+    });
+
+    // Exit to let Docker restart with new image
+    setTimeout(() => process.exit(0), 5000);
+  } catch (error) {
+    console.error("❌ Deployment failed:", error);
+  }
+});
+
 // Client version endpoint for cache busting
 app.get("/api/version", (req, res) => {
   res.json({ version: CLIENT_VERSION });
