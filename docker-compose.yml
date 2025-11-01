@@ -10,6 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5500
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       # Mount source code for live development (optional - comment out for pure Render-like behavior)
       - ./public:/app/public:ro
@@ -27,6 +28,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5500
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     restart: unless-stopped
     networks:
       - game-network
